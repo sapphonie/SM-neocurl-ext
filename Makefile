@@ -1,9 +1,11 @@
 # (C)2004-2008 SourceMod Development Team
 # Makefile written by David "BAILOPAN" Anderson
 
-SMSDK = ../..
-SRCDS_BASE = ~/srcds
-MMSOURCE17 = ../../../mmsource-central
+#SMSDK = ../..
+SMSDK = ../alliedmodders/sourcemod
+# SRCDS_BASE = ~/srcds
+# MMSOURCE17 = ../../../mmsource-central
+MMSOURCE17 = ../alliedmodders/mmsource-1.12
 
 #####################################
 ### EDIT BELOW FOR OTHER PROJECTS ###
@@ -36,24 +38,45 @@ CPP = gcc
 
 METAMOD = $(MMSOURCE17)/core-legacy
 
+# yes yes i know i will clean it up later
 INCLUDE += -I. -I.. -Isdk -I../ \
-	-I$(METAMOD)/sourcehook -I$(SMSDK)/public -I$(SMSDK)/public/extensions \
-	-I$(SMSDK)/public/sourcepawn \
-	-I/opt/Source/lib/openssl/include \
+	-I$(MMSOURCE17)/core/sourcehook \
+	-I$(SMSDK)/public \
+	-I$(SMSDK)/public/extensions \
+	-I$(SMSDK)/sourcepawn/include \
+	-I$(SMSDK)/sourcepawn \
+	-I$(SMSDK)/public/amtl/amtl \
+	-I$(SMSDK)/public/amtl/ \
+	-I/opt/Source/lib/openssl/include
+# ../alliedmodders/mmsource-1.12
+# 	-I$(METAMOD)/sourcehook \
+
+#	-I$(SMSDK)/public/sourcepawn \
+
 
 CFLAGS += -DSE_EPISODEONE=1 -DSE_DARKMESSIAH=2 -DSE_ORANGEBOX=3 -DSE_ORANGEBOXVALVE=4 -DSE_LEFT4DEAD=5 -DSE_LEFT4DEAD2=6
 
 CFLAGS += -DCURL_STATIC_LIB
 
-LINK += -L./lib -lcurl -lrt -lssh2 -lssl -lcrypto -lz
+LINK += -L./lib -lcurl -lrt -lssh2 -lssl -lcrypto -lz -lnghttp2 -lngtcp2 -lbrotlidec-static -lbrotlienc-static -lbrotlicommon-static -lzstd -lgsasl
+LINK += -m32 -ldl -lm -L/usr/lib32 -lstdc++
+# -static
 
-LINK += -m32 -ldl -lm
+
+# #-lgsasl
+ 
 
 CFLAGS += -D_LINUX -Dstricmp=strcasecmp -D_stricmp=strcasecmp -D_strnicmp=strncasecmp -Dstrnicmp=strncasecmp \
-	-D_snprintf=snprintf -D_vsnprintf=vsnprintf -D_alloca=alloca -Dstrcmpi=strcasecmp -Wall -Werror -Wno-switch \
+	-D_snprintf=snprintf -D_vsnprintf=vsnprintf -D_alloca=alloca -Dstrcmpi=strcasecmp -Wall -Wno-switch \
 	-Wno-unused -mfpmath=sse -msse -DSOURCEMOD_BUILD -DHAVE_STDINT_H -m32
 
-CPPFLAGS += -Wno-non-virtual-dtor -fno-exceptions -fno-rtti -fno-threadsafe-statics
+
+# 	-D_snprintf=snprintf -D_vsnprintf=vsnprintf -D_alloca=alloca -Dstrcmpi=strcasecmp -Wall -Werror -Wno-switch \
+
+
+#CPPFLAGS += -Wno-non-virtual-dtor -fno-exceptions -fno-rtti -fno-threadsafe-statics
+CPPFLAGS += -fno-exceptions -fno-rtti -fno-threadsafe-statics 
+#-fabi-compat-version=3
 
 ################################################
 ### DO NOT EDIT BELOW HERE FOR MOST PROJECTS ###
