@@ -9,8 +9,8 @@
 
 #define	MD5_FILE_BUFFER_SIZE		1024*16
 #define	MD4_FILE_BUFFER_SIZE		1024*16
-#define	MD2_FILE_BUFFER_SIZE		1024*16
-#define SHA_FILE_BUFFER_SIZE		1024*16
+//#define	MD2_FILE_BUFFER_SIZE		1024*16
+// #define SHA_FILE_BUFFER_SIZE		1024*16
 #define SHA1_FILE_BUFFER_SIZE		1024*16
 #define SHA224_FILE_BUFFER_SIZE		1024*16
 #define SHA256_FILE_BUFFER_SIZE		1024*16
@@ -63,6 +63,7 @@ static void MD4_File(FILE *file, unsigned char **output, int *outlength)
 	MD4_Final(*output, &c);
 }
 
+/*
 static void MD2_File(FILE *file, unsigned char **output, int *outlength)
 {
 	*output = new unsigned char[MD2_DIGEST_LENGTH];
@@ -102,6 +103,7 @@ static void SHA_File(FILE *file, unsigned char **output, int *outlength)
 	}
 	SHA_Final(*output, &c);
 }
+*/
 
 static void SHA1_File(FILE *file, unsigned char **output, int *outlength)
 {
@@ -281,12 +283,12 @@ bool OpensslManager::HashFile(Openssl_Hash algorithm, FILE *pFile, unsigned char
 		case Openssl_Hash_MD4:
 			MD4_File(pFile, output, outlength);
 			return true;
-		case Openssl_Hash_MD2:
-			MD2_File(pFile, output, outlength);
-			return true;
-		case Openssl_Hash_SHA:
-			SHA_File(pFile, output, outlength);
-			return true;
+		//case Openssl_Hash_MD2:
+		//	MD2_File(pFile, output, outlength);
+		//	return true;
+		//case Openssl_Hash_SHA:
+		//	SHA_File(pFile, output, outlength);
+		//	return true;
 		case Openssl_Hash_SHA1:
 			SHA1_File(pFile, output, outlength);
 			return true;
@@ -323,14 +325,14 @@ bool OpensslManager::HashString(Openssl_Hash algorithm, unsigned char *input, in
 			MD4(input, size, output);
 			*outlength = MD4_DIGEST_LENGTH;
 			return true;
-		case Openssl_Hash_MD2:
-			MD2(input, size, output);
-			*outlength = MD2_DIGEST_LENGTH;
-			return true;
-		case Openssl_Hash_SHA:
-			SHA(input, size, output);
-			*outlength = SHA_DIGEST_LENGTH;
-			return true;
+		//case Openssl_Hash_MD2:
+		//	MD2(input, size, output);
+		//	*outlength = MD2_DIGEST_LENGTH;
+		//	return true;
+		//case Openssl_Hash_SHA:
+		//	SHA(input, size, output);
+		//	*outlength = SHA_DIGEST_LENGTH;
+		//	return true;
 		case Openssl_Hash_SHA1:
 			SHA1(input, size, output);
 			*outlength = SHA_DIGEST_LENGTH;
