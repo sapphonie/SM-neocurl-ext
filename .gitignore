@@ -1,0 +1,6 @@
+.vs
+sm-*
+mm-*
+test*
+Release/
+Debug/
