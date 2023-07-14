@@ -17,7 +17,7 @@ docker run -it \
 --mount type=bind,source=${script_folder}/../,target=/mnt/curl \
 --user "$(id -u):$(id -g)" \
 ${img} \
-bash #/mnt/curl/ci/_docker_script.sh
+bash /mnt/curl/ci/_docker_script.sh
 
 
 
