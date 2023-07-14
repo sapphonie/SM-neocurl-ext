@@ -20,15 +20,12 @@ jobs:
         run: |
           pwd
           ls -la
-          mkdir build
-          cd build
-          mkdir scripting/include -p
-          mkdir extensions
-          mkdir plugins
-          cp ../Release/curl.ext.so extensions/ -v
+          pushd build
           7za a -r build/sm-neocurl.zip scripting/ plugins/ extensions/
           ls -la
           pwd
+          ls -la
+          popd
       - name: Set Commit Hash
         id: commit_info
         run: 'echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"'
