@@ -38,12 +38,12 @@
  */
 
 /* Basic information exposed publicly */
-#define SMEXT_CONF_NAME			"cURL Extension"
-#define SMEXT_CONF_DESCRIPTION	"cURL Extension"
-#define SMEXT_CONF_VERSION		"1.3.0.0"
-#define SMEXT_CONF_AUTHOR		"ben"
-#define SMEXT_CONF_URL			"http://www.ZombieX2.net/"
-#define SMEXT_CONF_LOGTAG		"cURL"
+#define SMEXT_CONF_NAME			"NEO cURL Extension"
+#define SMEXT_CONF_DESCRIPTION	"NEO cURL Extension"
+#define SMEXT_CONF_VERSION		"2.0.0.0"
+#define SMEXT_CONF_AUTHOR		"https://sappho.io - formerly ben"
+#define SMEXT_CONF_URL			"https://sappho.io - formerly maintained by http://www.ZombieX2.net/"
+#define SMEXT_CONF_LOGTAG		"NEO cURL"
 #define SMEXT_CONF_LICENSE		"GPL"
 #define SMEXT_CONF_DATESTRING	__DATE__
 
