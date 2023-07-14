@@ -18,6 +18,8 @@ jobs:
 
           - name: Zip packages
             run: |
+              pwd
+              ls -la
               mkdir build
               cd build
               mkdir scripting/include -p
