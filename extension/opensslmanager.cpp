@@ -6,10 +6,13 @@
 #include <openssl/sha.h>
 #include <openssl/ripemd.h>
 
+// NEED to convert this to using EVP one of these days...
+// https://www.openssl.org/docs/manmaster/man3/EVP_DigestInit.html
+// -sappho
 
 #define	MD5_FILE_BUFFER_SIZE		1024*16
 #define	MD4_FILE_BUFFER_SIZE		1024*16
-//#define	MD2_FILE_BUFFER_SIZE		1024*16
+// #define MD2_FILE_BUFFER_SIZE		1024*16
 // #define SHA_FILE_BUFFER_SIZE		1024*16
 #define SHA1_FILE_BUFFER_SIZE		1024*16
 #define SHA224_FILE_BUFFER_SIZE		1024*16
@@ -283,12 +286,14 @@ bool OpensslManager::HashFile(Openssl_Hash algorithm, FILE *pFile, unsigned char
 		case Openssl_Hash_MD4:
 			MD4_File(pFile, output, outlength);
 			return true;
-		//case Openssl_Hash_MD2:
-		//	MD2_File(pFile, output, outlength);
-		//	return true;
-		//case Openssl_Hash_SHA:
-		//	SHA_File(pFile, output, outlength);
-		//	return true;
+		case Openssl_Hash_MD2:
+			//MD2_File(pFile, output, outlength);
+			//return true;
+			return false;
+		case Openssl_Hash_SHA:
+			//SHA_File(pFile, output, outlength);
+			//return true;
+			return false;
 		case Openssl_Hash_SHA1:
 			SHA1_File(pFile, output, outlength);
 			return true;
@@ -329,10 +334,12 @@ bool OpensslManager::HashString(Openssl_Hash algorithm, unsigned char *input, in
 		//	MD2(input, size, output);
 		//	*outlength = MD2_DIGEST_LENGTH;
 		//	return true;
+			return false;
 		//case Openssl_Hash_SHA:
 		//	SHA(input, size, output);
 		//	*outlength = SHA_DIGEST_LENGTH;
 		//	return true;
+			return false;
 		case Openssl_Hash_SHA1:
 			SHA1(input, size, output);
 			*outlength = SHA_DIGEST_LENGTH;

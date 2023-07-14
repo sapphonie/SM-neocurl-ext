@@ -2,10 +2,10 @@
 # Makefile written by David "BAILOPAN" Anderson
 
 #SMSDK = ../..
-SMSDK = ./sm-1.11
+SMSDK = ../build/sm-1.11
 # SRCDS_BASE = ~/srcds
 # MMSOURCE17 = ../../../mmsource-central
-MMSOURCE17 = ./mm-1.11
+MMSOURCE17 = ../build/mm-1.11
 
 #####################################
 ### EDIT BELOW FOR OTHER PROJECTS ###
@@ -29,8 +29,8 @@ OBJECTS = \
 ### CONFIGURE ANY OTHER FLAGS/OPTIONS HERE ###
 ##############################################
 
-C_OPT_FLAGS = -DNDEBUG -O3 -funroll-loops -pipe -fno-strict-aliasing
-C_DEBUG_FLAGS = -D_DEBUG -DDEBUG -g -ggdb3
+C_OPT_FLAGS = -DNDEBUG -O3 -funroll-loops -pipe -fno-strict-aliasing -g -ggdb
+C_DEBUG_FLAGS = -D_DEBUG -DDEBUG
 C_GCC4_FLAGS = -fvisibility=hidden
 CPP_GCC4_FLAGS = -fvisibility-inlines-hidden
 CPP = gcc

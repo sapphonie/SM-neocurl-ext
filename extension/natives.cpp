@@ -520,6 +520,16 @@ static cell_t sm_curl_hash_file(IPluginContext *pContext, const cell_t *params)
 
 static cell_t sm_curl_hash_string(IPluginContext *pContext, const cell_t *params)
 {
+	Openssl_Hash hashType = (Openssl_Hash)params[3];
+	if
+	(
+		   hashType == Openssl_Hash_MD2
+		|| hashType == Openssl_Hash_SHA
+	)
+	{
+		return pContext->ThrowNativeError("Deprecated hash function %x - Sorry!", params[3]);
+	}
+
 	char *input;
 	unsigned int data_size = (unsigned int)params[2];
 	if(data_size > 0)
