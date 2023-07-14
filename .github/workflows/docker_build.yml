@@ -12,7 +12,7 @@ jobs:
       - name: Run the build process with Docker
         uses: addnab/docker-run-action@v3
         with:
-          image: 'registry.gitlab.steamos.cloud/steamrt/sniper/sdk:latest'
+          image: 'debian:11-slim'
           options: '-v ${{ github.workspace }}:/mnt/curl'
           run: |
             bash /mnt/curl/ci/_docker_script.sh
@@ -28,7 +28,10 @@ jobs:
           popd
       - name: Release
         uses: softprops/action-gh-release@v1
-        if: 'startsWith(github.ref, ''refs/tags/'')'
+        if: 'startsWith(github.ref, "refs/tags/")'
         with:
           files: |
             ./build/sm-neocurl.zip
+          fail_on_unmatched_files: true
+          if: 'contains(github.ref, "beta")'
+          prerelease: true
