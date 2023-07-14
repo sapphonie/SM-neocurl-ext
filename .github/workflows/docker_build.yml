@@ -20,8 +20,6 @@ jobs:
         run: |
           pwd
           ls -la
-          # chmod 777 * -Rfv
-          # chown runner:docker * -Rfv
           pushd build
           7za a -r sm-neocurl.zip scripting/ plugins/ extensions/
           ls -la
