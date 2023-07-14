@@ -9,12 +9,15 @@ script_folder=$( cd -- "$( dirname -- "${thisiswhereiam}" )" &> /dev/null && pwd
 # this should be /whatever/directory/structure/[sdkmod-source]/build
 build_dir="build"
 
+img="registry.gitlab.steamos.cloud/steamrt/sniper/sdk"
+img="debian:11-slim"
 echo ${thisiswhereiam}
 echo ${script_folder}
 docker run -it \
 --mount type=bind,source=${script_folder}/../,target=/mnt/curl \
-registry.gitlab.steamos.cloud/steamrt/sniper/sdk \
-bash /mnt/curl/ci/_docker_script.sh
+--user "$(id -u):$(id -g)" \
+${img} \
+bash #/mnt/curl/ci/_docker_script.sh
 
 
 

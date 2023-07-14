@@ -1,5 +1,8 @@
 #!/bin/bash
-
+dpkg --add-architecture i386
+apt update
+apt install p7zip-full git ca-certificates build-essential g++-multilib -y --no-install-recommends
+# lib32stdc++-10-dev lib32z1-dev libc6-dev-i386 linux-libc-dev:i386
 cd /mnt/curl/
 git config --global --add safe.directory "*"
 rm -rf build
@@ -27,6 +30,8 @@ cp pawn/* build/ -Rfv
 # cleanup
 
 pushd build
+	7za a -r sm-neocurl.zip scripting/ plugins/ extensions/
+
 	rm -rf ./sm-1.11
 	rm -rf ./mm-1.11
 popd
