@@ -1,4 +1,4 @@
-sdfasd#!/bin/bash
+#!/bin/bash
 
 # we do this so that we can be agnostic about where we're invoked from
 # meaning you can exec this script anywhere and it should work the same
@@ -13,8 +13,7 @@ echo ${script_folder}
 docker run -it \
 --mount type=bind,source=${script_folder}/../,target=/mnt/curl \
 registry.gitlab.steamos.cloud/steamrt/sniper/sdk \
-bash
-#/mnt/curl/ci/_docker_script.sh
+bash /mnt/curl/ci/_docker_script.sh
 
 
 
