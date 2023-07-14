@@ -2,10 +2,10 @@
 # Makefile written by David "BAILOPAN" Anderson
 
 #SMSDK = ../..
-SMSDK = ../alliedmodders/sourcemod
+SMSDK = ./sm-1.11
 # SRCDS_BASE = ~/srcds
 # MMSOURCE17 = ../../../mmsource-central
-MMSOURCE17 = ../alliedmodders/mmsource-1.12
+MMSOURCE17 = ./mm-1.11
 
 #####################################
 ### EDIT BELOW FOR OTHER PROJECTS ###
