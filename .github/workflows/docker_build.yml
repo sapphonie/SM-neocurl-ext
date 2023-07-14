@@ -30,9 +30,13 @@ jobs:
               ls -la
               pwd
 
-          - name: Set Commit Hash
-            id: commit_info
-            run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+          #- name: Set Commit Hash
+          #  id: commit_info
+          #  run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+          #
+          #- name: Set output
+          #  run: echo "{name}={value}" >> $GITHUB_OUTPUT
+
 
           - name: Create Release
             id: create_release
@@ -40,10 +44,10 @@ jobs:
             env:
               GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             with:
-              tag_name: ${{ github.ref }}
-              release_name: ${{ github.ref }}
+              tag_name: $(git rev-parse --short HEAD)
+              release_name: $(git rev-parse --short HEAD)
               draft: false
-              prerelease: false
+              prerelease: true
 
           - name: Upload Release Asset
             id: upload-release-asset
@@ -52,6 +56,6 @@ jobs:
               GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             with:
               upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
-              asset_path: ./build/stac.zip
-              asset_name: stac.zip
+              asset_path: ./build/sm-neocurl.zip
+              asset_name: sm-neocurl.zip
               asset_content_type: application/zip
