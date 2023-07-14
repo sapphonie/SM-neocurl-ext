@@ -2,7 +2,6 @@
   push:
     tags:
       - v*
-
 jobs:
   compile:
     name: Compile extension in docker
@@ -10,41 +9,26 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@v2
-      #- name: Run the build process with Docker
-      #  uses: addnab/docker-run-action@v3
-      #  with:
-      #    image: 'registry.gitlab.steamos.cloud/steamrt/sniper/sdk:latest'
-      #    options: '-v ${{ github.workspace }}:/mnt/curl'
-      #    run: |
-      #      bash /mnt/curl/ci/_docker_script.sh
-      #- name: Zip packages
-      #  run: |
-      #    pwd
-      #    ls -la
-      #    pushd build
-      #    7za a -r sm-neocurl.zip scripting/ plugins/ extensions/
-      #    ls -la
-      #    pwd
-      #    ls -la
-      #    popd
-      #
-
+      - name: Run the build process with Docker
+        uses: addnab/docker-run-action@v3
+        with:
+          image: 'registry.gitlab.steamos.cloud/steamrt/sniper/sdk:latest'
+          options: '-v ${{ github.workspace }}:/mnt/curl'
+          run: |
+            bash /mnt/curl/ci/_docker_script.sh
+      - name: Zip packages
+        run: |
+          pwd
+          ls -la
+          pushd build
+          7za a -r sm-neocurl.zip scripting/ plugins/ extensions/
+          ls -la
+          pwd
+          ls -la
+          popd
       - name: Release
         uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
+        if: 'startsWith(github.ref, ''refs/tags/'')'
         with:
-            name: ${{ github.ref }}
-            files: |
-              .gitignore
-
-      # - name: Upload Release Asset
-      #   id: upload-release-asset
-      #   uses: actions/upload-release-asset@v1
-      #   env:
-      #     GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
-      #   with:
-      #     upload_url: '${{ steps.create_release.outputs.upload_url }}'
-      #     asset_path: ./build/sm-neocurl.zip
-      #     asset_name: sm-neocurl.zip
-      #     asset_content_type: application/zip
-      
+          files: |
+            ./build/sm-neocurl.zip
