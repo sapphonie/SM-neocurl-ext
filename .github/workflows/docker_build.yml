@@ -24,7 +24,8 @@ jobs:
               cd build
               mkdir scripting/include -p
               mkdir extensions
-              cp Release/curl.ext.so extensions/ -v
+              mkdir plugins
+              cp ../Release/curl.ext.so extensions/ -v
               7za a -r build/sm-neocurl.zip scripting/ plugins/ extensions/
               ls -la
               pwd
