@@ -30,3 +30,5 @@ pushd build
 	rm -rf ./sm-1.11
 	rm -rf ./mm-1.11
 popd
+
+chmod 777 * -Rfv

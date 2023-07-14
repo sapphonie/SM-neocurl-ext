@@ -5,6 +5,7 @@
 thisiswhereiam=${BASH_SOURCE[0]}
 # this should be /whatever/directory/structure/Open-Fortress-Source
 script_folder=$( cd -- "$( dirname -- "${thisiswhereiam}" )" &> /dev/null && pwd )
+
 # this should be /whatever/directory/structure/[sdkmod-source]/build
 build_dir="build"
 
