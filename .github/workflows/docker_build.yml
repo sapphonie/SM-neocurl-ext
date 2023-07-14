@@ -33,5 +33,6 @@ jobs:
           files: |
             ./build/sm-neocurl.zip
           fail_on_unmatched_files: true
+          generate_release_notes: true
           if: 'contains(github.ref, "beta")'
           prerelease: true
