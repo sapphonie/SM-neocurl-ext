@@ -33,10 +33,10 @@ jobs:
           #- name: Set Commit Hash
           #  id: commit_info
           #  run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
-          #
-          #- name: Set output
-          #  run: echo "{name}={value}" >> $GITHUB_OUTPUT
-
+          
+          - name: Set Commit Hash
+            id: getsha
+            run: echo "{sha_short}=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
           - name: Create Release
             id: create_release
@@ -44,8 +44,8 @@ jobs:
             env:
               GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             with:
-              tag_name: $(git rev-parse --short HEAD)
-              release_name: $(git rev-parse --short HEAD)
+              tag_name: ${{ steps.getsha.outputs.sha_short }}
+              release_name: ${{ steps.getsha.outputs.sha_short }}
               draft: false
               prerelease: true
 
