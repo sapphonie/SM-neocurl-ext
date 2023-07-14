@@ -1,0 +1,14 @@
+jobs:
+    compile:
+        name: Compile extension in docker
+        runs-on: ubuntu-latest
+        steps:
+          - name: Check out the repo
+            uses: actions/checkout@v2
+          - name: Run the build process with Docker
+            uses: addnab/docker-run-action@v3
+            with:
+                image: registry.gitlab.steamos.cloud/steamrt/sniper/sdk:latest
+                options: -v ${{ github.workspace }}:/mnt/curl
+                run: |
+                    bash ./ci/_docker_script
