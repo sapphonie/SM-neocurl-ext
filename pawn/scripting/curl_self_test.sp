@@ -81,8 +81,8 @@ public Plugin:myinfo =
 #define TEST_7_TARGET_URL		"http://www.image-upload.net/images"
 
 /* http://www.secureftp-test.com/ */
-#define TEST_8_FTPS_USERPW		"test:test"
-#define TEST_8_FTPS_URL			"ftps://ftp.secureftp-test.com:990/bookstore.xml"
+#define TEST_8_FTPS_USERPW		"demo:password"
+#define TEST_8_FTPS_URL			"ftps://test.rebex.net"
 #define TEST_8_FILE				"test_8_bookstore.xml"
 
 
@@ -92,8 +92,9 @@ new CURL_Default_opt[][2] = {
 	{_:CURLOPT_NOSIGNAL,1},
 #endif
 	{_:CURLOPT_NOPROGRESS,1},
-	{_:CURLOPT_TIMEOUT,30},
-	{_:CURLOPT_CONNECTTIMEOUT,60},
+	{_:CURLOPT_TIMEOUT,5},
+	{_:CURLOPT_CONNECTTIMEOUT,5},
+	{_:CURLOPT_DNS_CACHE_TIMEOUT,5},
 	{_:CURLOPT_VERBOSE,0}
 };
 
