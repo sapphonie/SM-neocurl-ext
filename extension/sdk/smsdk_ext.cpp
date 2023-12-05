@@ -240,6 +240,10 @@ const char *SDKExtension::GetExtensionDateString()
 	return SMEXT_CONF_DATESTRING;
 }
 
+void SDKExtension::OnDependenciesDropped()
+{
+}
+
 const char *SDKExtension::GetExtensionDescription()
 {
 	return SMEXT_CONF_DESCRIPTION;
@@ -279,6 +283,10 @@ void SDKExtension::SDK_OnPauseChange(bool paused)
 }
 
 void SDKExtension::SDK_OnAllLoaded()
+{
+}
+
+void SDKExtension::SDK_OnDependenciesDropped(void)
 {
 }
 

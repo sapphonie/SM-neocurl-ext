@@ -1,5 +1,5 @@
 /**
- * vim: set ts=4 :
+ * vim: set ts=4 sw=4 tw=99 noet:
  * =============================================================================
  * SourceMod Base Extension Code
  * Copyright (C) 2004-2008 AlliedModders LLC.  All rights reserved.
@@ -8,7 +8,7 @@
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU General Public License, version 3.0, as published by the
  * Free Software Foundation.
- * 
+ *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
  * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
@@ -32,10 +32,10 @@
 #ifndef _INCLUDE_SOURCEMOD_EXTENSION_BASESDK_H_
 #define _INCLUDE_SOURCEMOD_EXTENSION_BASESDK_H_
 
-/**
- * @file smsdk_ext.h
- * @brief Contains wrappers for making Extensions easier to write.
- */
+ /**
+  * @file smsdk_ext.h
+  * @brief Contains wrappers for making Extensions easier to write.
+  */
 
 #include "smsdk_config.h"
 #include <IExtensionSys.h>
@@ -43,6 +43,7 @@
 #include <sp_vm_api.h>
 #include <sm_platform.h>
 #include <ISourceMod.h>
+#include "am-string.h"
 #if defined SMEXT_ENABLE_FORWARDSYS
 #include <IForwardSys.h>
 #endif //SMEXT_ENABLE_FORWARDSYS
@@ -91,19 +92,25 @@
 #if defined SMEXT_ENABLE_TRANSLATOR
 #include <ITranslator.h>
 #endif
-#if defined SMEXT_ENABLE_NINVOKE
-#include <INativeInvoker.h>
+#if defined SMEXT_ENABLE_ROOTCONSOLEMENU
+#include <IRootConsoleMenu.h>
 #endif
 
 #if defined SMEXT_CONF_METAMOD
 #include <ISmmPlugin.h>
+#ifndef META_NO_HL2SDK
 #include <eiface.h>
+#endif //META_NO_HL2SDK
+#endif
+
+#if !defined METAMOD_PLAPI_VERSION
+#include <metamod_wrappers.h>
 #endif
 
 using namespace SourceMod;
 using namespace SourcePawn;
 
-class SDKExtension : 
+class SDKExtension :
 #if defined SMEXT_CONF_METAMOD
 	public ISmmPlugin,
 #endif
@@ -121,10 +128,10 @@ public:
 	 * @param late		Whether or not the module was loaded after map load.
 	 * @return			True to succeed loading, false to fail.
 	 */
-	virtual bool SDK_OnLoad(char *error, size_t maxlength, bool late);
-	
+	virtual bool SDK_OnLoad(char* error, size_t maxlength, bool late);
+
 	/**
-	 * @brief This is called right before the extension is unloaded.
+	 * @brief This is called once the extension unloading process begins.
 	 */
 	virtual void SDK_OnUnload();
 
@@ -138,6 +145,12 @@ public:
 	 */
 	virtual void SDK_OnPauseChange(bool paused);
 
+	/**
+	 * @brief Called after SDK_OnUnload, once all dependencies have been
+	 * removed, and the extension is about to be removed from memory.
+	 */
+	virtual void SDK_OnDependenciesDropped();
+
 #if defined SMEXT_CONF_METAMOD
 	/**
 	 * @brief Called when Metamod is attached, before the extension version is called.
@@ -147,7 +160,7 @@ public:
 	 * @param late			Whether or not Metamod considers this a late load.
 	 * @return				True to succeed, false to fail.
 	 */
-	virtual bool SDK_OnMetamodLoad(ISmmAPI *ismm, char *error, size_t maxlength, bool late);
+	virtual bool SDK_OnMetamodLoad(ISmmAPI* ismm, char* error, size_t maxlength, bool late);
 
 	/**
 	 * @brief Called when Metamod is detaching, after the extension version is called.
@@ -157,7 +170,7 @@ public:
 	 * @param maxlength		Maximum size of error buffer.
 	 * @return				True to succeed, false to fail.
 	 */
-	virtual bool SDK_OnMetamodUnload(char *error, size_t maxlength);
+	virtual bool SDK_OnMetamodUnload(char* error, size_t maxlength);
 
 	/**
 	 * @brief Called when Metamod's pause state is changing.
@@ -168,11 +181,11 @@ public:
 	 * @param maxlength		Maximum size of error buffer.
 	 * @return				True to succeed, false to fail.
 	 */
-	virtual bool SDK_OnMetamodPauseChange(bool paused, char *error, size_t maxlength);
+	virtual bool SDK_OnMetamodPauseChange(bool paused, char* error, size_t maxlength);
 #endif
 
 public: //IExtensionInterface
-	virtual bool OnExtensionLoad(IExtension *me, IShareSys *sys, char *error, size_t maxlength, bool late);
+	virtual bool OnExtensionLoad(IExtension* me, IShareSys* sys, char* error, size_t maxlength, bool late);
 	virtual void OnExtensionUnload();
 	virtual void OnExtensionsAllLoaded();
 
@@ -181,51 +194,54 @@ public: //IExtensionInterface
 
 	/**
 	 * @brief Called when the pause state changes.
-	 * 
+	 *
 	 * @param state			True if being paused, false if being unpaused.
 	 */
 	virtual void OnExtensionPauseChange(bool state);
 
 	/** Returns name */
-	virtual const char *GetExtensionName();
+	virtual const char* GetExtensionName();
 	/** Returns URL */
-	virtual const char *GetExtensionURL();
+	virtual const char* GetExtensionURL();
 	/** Returns log tag */
-	virtual const char *GetExtensionTag();
+	virtual const char* GetExtensionTag();
 	/** Returns author */
-	virtual const char *GetExtensionAuthor();
+	virtual const char* GetExtensionAuthor();
 	/** Returns version string */
-	virtual const char *GetExtensionVerString();
+	virtual const char* GetExtensionVerString();
 	/** Returns description string */
-	virtual const char *GetExtensionDescription();
+	virtual const char* GetExtensionDescription();
 	/** Returns date string */
-	virtual const char *GetExtensionDateString();
+	virtual const char* GetExtensionDateString();
+
+	/** Called after OnExtensionUnload, once dependencies have been dropped. */
+	virtual void OnDependenciesDropped();
 #if defined SMEXT_CONF_METAMOD
 public: //ISmmPlugin
 	/** Called when the extension is attached to Metamod. */
-	virtual bool Load(PluginId id, ISmmAPI *ismm, char *error, size_t maxlength, bool late);
+	virtual bool Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlength, bool late);
 	/** Returns the author to MM */
-	virtual const char *GetAuthor();
+	virtual const char* GetAuthor();
 	/** Returns the name to MM */
-	virtual const char *GetName();
+	virtual const char* GetName();
 	/** Returns the description to MM */
-	virtual const char *GetDescription();
+	virtual const char* GetDescription();
 	/** Returns the URL to MM */
-	virtual const char *GetURL();
+	virtual const char* GetURL();
 	/** Returns the license to MM */
-	virtual const char *GetLicense();
+	virtual const char* GetLicense();
 	/** Returns the version string to MM */
-	virtual const char *GetVersion();
+	virtual const char* GetVersion();
 	/** Returns the date string to MM */
-	virtual const char *GetDate();
+	virtual const char* GetDate();
 	/** Returns the logtag to MM */
-	virtual const char *GetLogTag();
+	virtual const char* GetLogTag();
 	/** Called on unload */
-	virtual bool Unload(char *error, size_t maxlength);
+	virtual bool Unload(char* error, size_t maxlength);
 	/** Called on pause */
-	virtual bool Pause(char *error, size_t maxlength);
+	virtual bool Pause(char* error, size_t maxlength);
 	/** Called on unpause */
-	virtual bool Unpause(char *error, size_t maxlength);
+	virtual bool Unpause(char* error, size_t maxlength);
 private:
 	bool m_SourceMMLoaded;
 	bool m_WeAreUnloaded;
@@ -233,73 +249,75 @@ private:
 #endif
 };
 
-extern SDKExtension *g_pExtensionIface;
-extern IExtension *myself;
+extern SDKExtension* g_pExtensionIface;
+extern IExtension* myself;
 
-extern IShareSys *g_pShareSys;
-extern IShareSys *sharesys;				/* Note: Newer name */
-extern ISourceMod *g_pSM;
-extern ISourceMod *smutils;				/* Note: Newer name */
+extern IShareSys* g_pShareSys;
+extern IShareSys* sharesys;				/* Note: Newer name */
+extern ISourceMod* g_pSM;
+extern ISourceMod* smutils;				/* Note: Newer name */
 
 /* Optional interfaces are below */
 #if defined SMEXT_ENABLE_FORWARDSYS
-extern IForwardManager *g_pForwards;
-extern IForwardManager *forwards;		/* Note: Newer name */
+extern IForwardManager* g_pForwards;
+extern IForwardManager* forwards;		/* Note: Newer name */
 #endif //SMEXT_ENABLE_FORWARDSYS
 #if defined SMEXT_ENABLE_HANDLESYS
-extern IHandleSys *g_pHandleSys;
-extern IHandleSys *handlesys;			/* Note: Newer name */
+extern IHandleSys* g_pHandleSys;
+extern IHandleSys* handlesys;			/* Note: Newer name */
 #endif //SMEXT_ENABLE_HANDLESYS
 #if defined SMEXT_ENABLE_PLAYERHELPERS
-extern IPlayerManager *playerhelpers;
+extern IPlayerManager* playerhelpers;
 #endif //SMEXT_ENABLE_PLAYERHELPERS
 #if defined SMEXT_ENABLE_DBMANAGER
-extern IDBManager *dbi;
+extern IDBManager* dbi;
 #endif //SMEXT_ENABLE_DBMANAGER
 #if defined SMEXT_ENABLE_GAMECONF
-extern IGameConfigManager *gameconfs;
+extern IGameConfigManager* gameconfs;
 #endif //SMEXT_ENABLE_DBMANAGER
 #if defined SMEXT_ENABLE_MEMUTILS
-extern IMemoryUtils *memutils;
+extern IMemoryUtils* memutils;
 #endif
 #if defined SMEXT_ENABLE_GAMEHELPERS
-extern IGameHelpers *gamehelpers;
+extern IGameHelpers* gamehelpers;
 #endif
 #if defined SMEXT_ENABLE_TIMERSYS
-extern ITimerSystem *timersys;
+extern ITimerSystem* timersys;
 #endif
 #if defined SMEXT_ENABLE_ADTFACTORY
-extern IADTFactory *adtfactory;
+extern IADTFactory* adtfactory;
 #endif
 #if defined SMEXT_ENABLE_THREADER
-extern IThreader *threader;
+extern IThreader* threader;
 #endif
 #if defined SMEXT_ENABLE_LIBSYS
-extern ILibrarySys *libsys;
+extern ILibrarySys* libsys;
 #endif
 #if defined SMEXT_ENABLE_PLUGINSYS
-extern SourceMod::IPluginManager *plsys;
+extern SourceMod::IPluginManager* plsys;
 #endif
 #if defined SMEXT_ENABLE_MENUS
-extern IMenuManager *menus;
+extern IMenuManager* menus;
 #endif
 #if defined SMEXT_ENABLE_ADMINSYS
-extern IAdminSystem *adminsys;
+extern IAdminSystem* adminsys;
 #endif
 #if defined SMEXT_ENABLE_USERMSGS
-extern IUserMessages *usermsgs;
+extern IUserMessages* usermsgs;
 #endif
 #if defined SMEXT_ENABLE_TRANSLATOR
-extern ITranslator *translator;
+extern ITranslator* translator;
 #endif
-#if defined SMEXT_ENABLE_NINVOKE
-extern INativeInterface *ninvoke;
+#if defined SMEXT_ENABLE_ROOTCONSOLEMENU
+extern IRootConsole* rootconsole;
 #endif
 
 #if defined SMEXT_CONF_METAMOD
 PLUGIN_GLOBALVARS();
-extern IVEngineServer *engine;
-extern IServerGameDLL *gamedll;
+#ifndef META_NO_HL2SDK
+extern IVEngineServer* engine;
+extern IServerGameDLL* gamedll;
+#endif //META_NO_HL2SDK
 #endif
 
 /** Creates a SourceMod interface macro pair */
@@ -310,7 +328,7 @@ extern IServerGameDLL *gamedll;
 	{ \
 		if (error != NULL && maxlength) \
 		{ \
-			size_t len = snprintf(error, maxlength, "Could not find interface: %s", SMINTERFACE_##prefix##_NAME); \
+			size_t len = ke::SafeSprintf(error, maxlength, "Could not find interface: %s", SMINTERFACE_##prefix##_NAME); \
 			if (len >= maxlength) \
 			{ \
 				error[maxlength - 1] = '\0'; \
@@ -327,7 +345,7 @@ extern IServerGameDLL *gamedll;
 	{ \
 		if (error != NULL && maxlength) \
 		{ \
-			size_t len = snprintf(error, maxlength, "Could not find interface: %s", SMINTERFACE_##prefix##_NAME); \
+			size_t len = ke::SafeSprintf(error, maxlength, "Could not find interface: %s", SMINTERFACE_##prefix##_NAME); \
 			if (len >= maxlength) \
 			{ \
 				error[maxlength - 1] = '\0'; \
