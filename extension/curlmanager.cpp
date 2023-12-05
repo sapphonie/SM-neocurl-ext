@@ -714,6 +714,23 @@ void cURLManager::LoadcURLOption(cURLHandle *handle)
 
 	handle->opt_loaded = true;
 	
+    static bool curlSetSSL = false;
+    if (!curlSetSSL)
+    {
+        // use the system ssl certs
+        CURLsslset sslset = curl_global_sslset(CURLSSLBACKEND_OPENSSL, NULL, NULL);
+        if (sslset != CURLSSLSET_OK)
+        {
+            printf("curl_global_sslset failed: %i\n", sslset);
+            return;
+        }
+        curlSetSSL = true;
+    }
+
+
+    curl_easy_setopt(handle->curl, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
+    curl_easy_setopt(handle->curl, CURLOPT_ACCEPT_ENCODING, "");
+
 	curl_easy_setopt(handle->curl, CURLOPT_ERRORBUFFER, handle->errorBuffer);
 
 	curl_easy_setopt(handle->curl, CURLOPT_OPENSOCKETFUNCTION, curl_opensocket_function);
