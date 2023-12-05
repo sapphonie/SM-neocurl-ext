@@ -19,13 +19,15 @@ struct data_t {
 	size_t nmemb;
 	size_t return_value;
 };
-
+#include <io.h>
 /* Write Function */
 static size_t curl_write_function_default(void *ptr, size_t bytes, size_t nmemb, void *stream)
 {
 	FILE *file = (FILE *)stream;
 #ifdef WIN32
-	if(file->_file >= 3)
+	//if(file->_file >= 3)
+
+	if ( _filelength(_fileno(file)) >= 3 )
 #else
 	if(file->_fileno >= 3)
 #endif
