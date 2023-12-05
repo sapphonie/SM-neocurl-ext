@@ -6,3 +6,4 @@ Release/
 Debug/
 build
 build/*
+extension/CppProperties.json
