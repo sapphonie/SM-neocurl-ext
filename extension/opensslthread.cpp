@@ -1,5 +1,11 @@
 #include "opensslthread.h"
 
+// Yes. I know. I will make this not use fopen. Shut up.
+#ifdef _WIN32
+#pragma warning(disable:4996)
+#define _CRT_SECURE_NO_WARNINGS 1
+#define CRT_SECURE_NO_WARNINGS 1
+#endif
 
 OpensslThread::OpensslThread(void *_data, OpensslThread_Type _type):
 type(_type),data(_data)

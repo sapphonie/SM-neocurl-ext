@@ -134,7 +134,7 @@ static void SHA512_File(FILE *file, unsigned char **output, int *outlength)
 	SHA512_CTX c;
 	int i;
 	unsigned char buf[SHA512_FILE_BUFFER_SIZE];
-	
+
 	SHA512_Init(&c);
 	for (;;)
 	{
@@ -230,20 +230,6 @@ bool OpensslManager::HashString(Openssl_Hash algorithm, unsigned char *input, in
 			MD5(input, size, output);
 			*outlength = MD5_DIGEST_LENGTH;
 			return true;
-		case Openssl_Hash_MD4:
-			MD4(input, size, output);
-			*outlength = MD4_DIGEST_LENGTH;
-			return true;
-		//case Openssl_Hash_MD2:
-		//	MD2(input, size, output);
-		//	*outlength = MD2_DIGEST_LENGTH;
-		//	return true;
-			return false;
-		//case Openssl_Hash_SHA:
-		//	SHA(input, size, output);
-		//	*outlength = SHA_DIGEST_LENGTH;
-		//	return true;
-			return false;
 		case Openssl_Hash_SHA1:
 			SHA1(input, size, output);
 			*outlength = SHA_DIGEST_LENGTH;
@@ -263,10 +249,6 @@ bool OpensslManager::HashString(Openssl_Hash algorithm, unsigned char *input, in
 		case Openssl_Hash_SHA512:
 			SHA512(input, size, output);
 			*outlength = SHA512_DIGEST_LENGTH;
-			return true;
-		case Openssl_Hash_RIPEMD160:
-			RIPEMD160(input, size, output);
-			*outlength = RIPEMD160_DIGEST_LENGTH;
 			return true;
 	}
 
