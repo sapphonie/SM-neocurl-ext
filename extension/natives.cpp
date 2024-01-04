@@ -501,12 +501,13 @@ static cell_t sm_curl_hash_file(IPluginContext *pContext, const cell_t *params)
 
 	char *filepath;
 	pContext->LocalToString(params[1], &filepath);
-	int len = strlen(filepath);
+	size_t len = strlen(filepath);
 
 	Openssl_Hash_pack *hash_pack = new Openssl_Hash_pack();
 	hash_pack->UserData = params[4];
-	hash_pack->path = new char[len+1];
-	strncpy(hash_pack->path, filepath, len);
+	hash_pack->path = new char[len+1]{};
+    snprintf(hash_pack->path, len, "%s", filepath);
+	// strncpy(hash_pack->path, filepath, len);
 	hash_pack->path[len] = '\0';
 
 	hash_pack->hash_callback = pFunction;
@@ -523,9 +524,11 @@ static cell_t sm_curl_hash_string(IPluginContext *pContext, const cell_t *params
 	Openssl_Hash hashType = (Openssl_Hash)params[3];
 	if
 	(
-		   hashType == Openssl_Hash_MD2
-		|| hashType == Openssl_Hash_SHA
-	)
+		   hashType == Openssl_Hash_DEPRECATED_MD2_UNUSABLE
+        || hashType == Openssl_Hash_DEPRECATED_MD4_UNUSABLE
+        || hashType == Openssl_Hash_DEPRECATED_SHA_UNUSABLE
+        || hashType == Openssl_Hash_DEPRECATED_RIPEMD160_UNUSABLE
+    )
 	{
 		return pContext->ThrowNativeError("Deprecated hash function %x - Sorry!", params[3]);
 	}

@@ -289,7 +289,6 @@ void SDKExtension::SDK_OnAllLoaded()
 void SDKExtension::SDK_OnDependenciesDropped(void)
 {
 }
-
 #if defined SMEXT_CONF_METAMOD
 
 PluginId g_PLID = 0;						/**< Metamod plugin ID */

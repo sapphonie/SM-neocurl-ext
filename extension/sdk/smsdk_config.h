@@ -40,7 +40,7 @@
 /* Basic information exposed publicly */
 #define SMEXT_CONF_NAME			"NEO cURL Extension"
 #define SMEXT_CONF_DESCRIPTION	"NEO cURL Extension"
-#define SMEXT_CONF_VERSION		"2.0.0.0"
+#define SMEXT_CONF_VERSION		"2.0.1"
 #define SMEXT_CONF_AUTHOR		"https://sappho.io - formerly ben"
 #define SMEXT_CONF_URL			"https://sappho.io - formerly maintained by http://www.ZombieX2.net/"
 #define SMEXT_CONF_LOGTAG		"NEO cURL"

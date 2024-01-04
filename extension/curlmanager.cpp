@@ -1,3 +1,5 @@
+#define CURL_NO_OLDIES
+
 #include "curlmanager.h"
 
 #ifdef PLATFORM_LINUX
@@ -23,13 +25,13 @@ struct data_t {
 /* Write Function */
 static size_t curl_write_function_default(void *ptr, size_t bytes, size_t nmemb, void *stream)
 {
-	FILE *file = (FILE *)stream;
+	FILE* file = (FILE*)stream;
+    // Pretty sure this is for determining if `stream` is actually a FILE* or not.
+    // This is really terrible and we should not be doing this since it erases types.
 #ifdef WIN32
-	//if(file->_file >= 3)
-
-	if ( _filelength(_fileno(file)) >= 3 )
+	if ( _fileno(file) >= 3 )
 #else
-	if(file->_fileno >= 3)
+	if( fileno(file) >= 3 )
 #endif
 	{
 		return fwrite(ptr, bytes, nmemb, file); 
@@ -388,9 +390,9 @@ bool cURLManager::AddcURLOptionString(cURLHandle *handle, CURLoption opt, char *
 		case CURLOPT_FTPPORT:
 		case CURLOPT_USERAGENT:
 		case CURLOPT_COOKIE:
-		case CURLOPT_ENCODING:
+		//case CURLOPT_ENCODING:
 		case CURLOPT_CUSTOMREQUEST:
-		case CURLOPT_WRITEINFO:
+		//case CURLOPT_WRITEINFO:
 		case CURLOPT_INTERFACE:
 		case CURLOPT_KRBLEVEL:
 		case CURLOPT_SSL_CIPHER_LIST:
@@ -493,7 +495,7 @@ bool cURLManager::AddcURLOptionInt(cURLHandle *handle, CURLoption opt, int value
 		case CURLOPT_MAXREDIRS:
 		case CURLOPT_FILETIME:
 		case CURLOPT_MAXCONNECTS:
-		case CURLOPT_CLOSEPOLICY:
+		//case CURLOPT_CLOSEPOLICY:
 		case CURLOPT_FRESH_CONNECT:
 		case CURLOPT_FORBID_REUSE:
 		case CURLOPT_CONNECTTIMEOUT:
@@ -511,7 +513,7 @@ bool cURLManager::AddcURLOptionInt(cURLHandle *handle, CURLoption opt, int value
 		case CURLOPT_HTTPAUTH:
 		case CURLOPT_FTP_CREATE_MISSING_DIRS:
 		case CURLOPT_PROXYAUTH:
-		case CURLOPT_FTP_RESPONSE_TIMEOUT:
+		//case CURLOPT_FTP_RESPONSE_TIMEOUT:
 		case CURLOPT_IPRESOLVE:
 		case CURLOPT_MAXFILESIZE:
 		case CURLOPT_USE_SSL:
@@ -736,9 +738,12 @@ void cURLManager::LoadcURLOption(cURLHandle *handle)
 	curl_easy_setopt(handle->curl, CURLOPT_OPENSOCKETFUNCTION, curl_opensocket_function);
 	curl_easy_setopt(handle->curl, CURLOPT_OPENSOCKETDATA, handle);
 
-	if(handle->callback_Function[cURL_CallBack_WRITE_FUNCTION] == NULL) {
+	if(handle->callback_Function[cURL_CallBack_WRITE_FUNCTION] == NULL)
+    {
 		curl_easy_setopt(handle->curl, CURLOPT_WRITEFUNCTION, curl_write_function_default);
-	} else {
+	}
+    else
+    {
 		curl_easy_setopt(handle->curl, CURLOPT_WRITEFUNCTION, curl_write_function_SM);
 		curl_easy_setopt(handle->curl, CURLOPT_WRITEDATA, handle);
 	}

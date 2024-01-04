@@ -11,7 +11,7 @@
 // -sappho
 
 #define	MD5_FILE_BUFFER_SIZE		1024*16
-#define	MD4_FILE_BUFFER_SIZE		1024*16
+// #define MD4_FILE_BUFFER_SIZE		1024*16
 // #define MD2_FILE_BUFFER_SIZE		1024*16
 // #define SHA_FILE_BUFFER_SIZE		1024*16
 #define SHA1_FILE_BUFFER_SIZE		1024*16
@@ -19,9 +19,9 @@
 #define SHA256_FILE_BUFFER_SIZE		1024*16
 #define SHA384_FILE_BUFFER_SIZE		1024*16
 #define SHA512_FILE_BUFFER_SIZE		1024*16
-#define RIPEMD160_FILE_BUFFER_SIZE	1024*16
+// #define RIPEMD160_FILE_BUFFER_SIZE	1024*16
 
-
+#include <openssl/evp.h>
 OpensslManager g_OpensslManager;
 
 static IMutex **ssl_lockarray;
@@ -45,68 +45,6 @@ static void MD5_File(FILE *file, unsigned char **output, int *outlength)
 	}
 	MD5_Final(*output, &c);
 }
-
-static void MD4_File(FILE *file, unsigned char **output, int *outlength)
-{
-	*output = new unsigned char[MD4_DIGEST_LENGTH];
-	*outlength = MD4_DIGEST_LENGTH;
-
-	MD4_CTX c;
-	int i;
-	unsigned char buf[MD4_FILE_BUFFER_SIZE];
-	
-	MD4_Init(&c);
-	for (;;)
-	{
-		i = fread(buf,1,MD4_FILE_BUFFER_SIZE,file);
-		if(i <= 0)
-			break;
-		MD4_Update(&c,buf,(unsigned long)i);
-	}
-	MD4_Final(*output, &c);
-}
-
-/*
-static void MD2_File(FILE *file, unsigned char **output, int *outlength)
-{
-	*output = new unsigned char[MD2_DIGEST_LENGTH];
-	*outlength = MD2_DIGEST_LENGTH;
-
-	MD2_CTX c;
-	int i;
-	unsigned char buf[MD2_FILE_BUFFER_SIZE];
-	
-	MD2_Init(&c);
-	for (;;)
-	{
-		i = fread(buf,1,MD2_FILE_BUFFER_SIZE,file);
-		if(i <= 0)
-			break;
-		MD2_Update(&c,buf,(unsigned long)i);
-	}
-	MD2_Final(*output, &c);
-}
-
-static void SHA_File(FILE *file, unsigned char **output, int *outlength)
-{
-	*output = new unsigned char[SHA_DIGEST_LENGTH];
-	*outlength = SHA_DIGEST_LENGTH;
-
-	SHA_CTX c;
-	int i;
-	unsigned char buf[SHA_FILE_BUFFER_SIZE];
-	
-	SHA_Init(&c);
-	for (;;)
-	{
-		i = fread(buf,1,SHA_FILE_BUFFER_SIZE,file);
-		if(i <= 0)
-			break;
-		SHA_Update(&c,buf,(unsigned long)i);
-	}
-	SHA_Final(*output, &c);
-}
-*/
 
 static void SHA1_File(FILE *file, unsigned char **output, int *outlength)
 {
@@ -195,7 +133,7 @@ static void SHA512_File(FILE *file, unsigned char **output, int *outlength)
 
 	SHA512_CTX c;
 	int i;
-	unsigned char buf[SHA384_FILE_BUFFER_SIZE];
+	unsigned char buf[SHA512_FILE_BUFFER_SIZE];
 	
 	SHA512_Init(&c);
 	for (;;)
@@ -206,26 +144,6 @@ static void SHA512_File(FILE *file, unsigned char **output, int *outlength)
 		SHA512_Update(&c,buf,(unsigned long)i);
 	}
 	SHA512_Final(*output, &c);
-}
-
-static void RIPEMD160_File(FILE *file, unsigned char **output, int *outlength)
-{
-	*output = new unsigned char[RIPEMD160_DIGEST_LENGTH];
-	*outlength = RIPEMD160_DIGEST_LENGTH;
-
-	RIPEMD160_CTX c;
-	int i;
-	unsigned char buf[RIPEMD160_FILE_BUFFER_SIZE];
-	
-	RIPEMD160_Init(&c);
-	for (;;)
-	{
-		i = fread(buf,1,RIPEMD160_FILE_BUFFER_SIZE,file);
-		if(i <= 0)
-			break;
-		RIPEMD160_Update(&c,buf,(unsigned long)i);
-	}
-	RIPEMD160_Final(*output, &c);
 }
 
 static void ssl_locking_callback(int mode, int type, const char *file, int line)
@@ -283,17 +201,6 @@ bool OpensslManager::HashFile(Openssl_Hash algorithm, FILE *pFile, unsigned char
 		case Openssl_Hash_MD5:
 			MD5_File(pFile, output, outlength);
 			return true;
-		case Openssl_Hash_MD4:
-			MD4_File(pFile, output, outlength);
-			return true;
-		case Openssl_Hash_MD2:
-			//MD2_File(pFile, output, outlength);
-			//return true;
-			return false;
-		case Openssl_Hash_SHA:
-			//SHA_File(pFile, output, outlength);
-			//return true;
-			return false;
 		case Openssl_Hash_SHA1:
 			SHA1_File(pFile, output, outlength);
 			return true;
@@ -308,9 +215,6 @@ bool OpensslManager::HashFile(Openssl_Hash algorithm, FILE *pFile, unsigned char
 			return true;
 		case Openssl_Hash_SHA512:
 			SHA512_File(pFile, output, outlength);
-			return true;
-		case Openssl_Hash_RIPEMD160:
-			RIPEMD160_File(pFile, output, outlength);
 			return true;
 	}
 
