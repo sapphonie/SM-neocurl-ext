@@ -78,24 +78,63 @@ static cell_t sm_curl_easy_setopt_int(IPluginContext *pContext, const cell_t *pa
 
 static cell_t sm_curl_easy_setopt_int_array(IPluginContext *pContext, const cell_t *params)
 {
+    // See UsesDirectArrays()
+    bool usesDirectArrays = pContext->GetRuntime()->UsesDirectArrays();
+    /*
+     * Direct arrays were introduced in SourcePawn 1.11. Any plugin with this
+     * feature will use absolute addressing for indirection vectors. Eg, for an
+     * array of array of cells (int x[][]), you can extract x[3][5] by doing:
+     *
+     *     cell_t addr_of_x = ...;
+     *     cell_t* phys_x;
+     *     LocalToPhysAddr(addr_of_x, &phys_x);
+     *     LocalToPhysAddr(phys_x[3], &phys_x);
+     *     cell_t value = phys_x[5];
+     */
+    if (!usesDirectArrays)
+    {
+        smutils->LogError(myself, 
+            "neocurl requires your plugins to be compiled with SourceMod 1.11 or later"
+            "if you're going to use curl_easy_setopt_int_array! Sorry!"
+        );
+
+        return false;
+    }
+
 	SETUP_CURL_HANDLE();
+    // ^ see this macro if you're wondering where param[1] went
+    // auto& curlhandle    = params[1];
+    auto& arrayInPawn   = params[2];
+	auto& arraySize     = params[3];
 
-	cell_t *array;
-	cell_t array_size = params[3];
-	pContext->LocalToPhysAddr(params[2], &array);
+    cell_t* arrayInRealMemory = {};
 
+	pContext->LocalToPhysAddr(arrayInPawn, &arrayInRealMemory);
+    
 	bool valid = true;
-	for(int i=0; i<array_size; i++)
+	for (int i = 0; i < arraySize; i++)
 	{
-		cell_t c1_addr = params[2] + (i * sizeof(cell_t)) + array[i];
-		cell_t *c1_r;
-		pContext->LocalToPhysAddr(c1_addr, &c1_r);
+        auto& thisElem = arrayInRealMemory[i];
+        cell_t* thisElem_phys = {};
+		pContext->LocalToPhysAddr(thisElem, &thisElem_phys);
+        if (!thisElem_phys)
+        {
+            smutils->LogError(myself, "thisElem is NULL!\n");
+            valid = false;
+            return valid;
+        }
+        
+        // Literally can not do this without a C cast. L
+        CURLoption curlOpt  = (CURLoption)( thisElem_phys[0] );
+        int curlVal         = static_cast<int>( thisElem_phys[1] );
 
-		bool ret = g_cURLManager.AddcURLOptionInt(handle, (CURLoption)c1_r[0], c1_r[1]);
-		if(!ret)
+        bool ret = g_cURLManager.AddcURLOptionInt(handle, curlOpt, curlVal);
+		if (!ret)
 		{
-			valid = false;
-		}
+            smutils->LogError(myself, "AddcURLOptionInt returned false!\n");
+            valid = false;
+            return valid;
+        }
 	}
 	return valid;
 }

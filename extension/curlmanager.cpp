@@ -723,7 +723,7 @@ void cURLManager::LoadcURLOption(cURLHandle *handle)
         CURLsslset sslset = curl_global_sslset(CURLSSLBACKEND_OPENSSL, NULL, NULL);
         if (sslset != CURLSSLSET_OK)
         {
-            printf("curl_global_sslset failed: %i\n", sslset);
+            smutils->LogError(myself, "curl_global_sslset failed : %i\n", sslset);
             return;
         }
         curlSetSSL = true;
