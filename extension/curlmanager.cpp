@@ -21,7 +21,11 @@ struct data_t {
 	size_t nmemb;
 	size_t return_value;
 };
+#ifdef _WIN32
 #include <io.h>
+#endif
+
+
 /* Write Function */
 static size_t curl_write_function_default(void *ptr, size_t bytes, size_t nmemb, void *stream)
 {
