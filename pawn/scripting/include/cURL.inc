@@ -122,18 +122,31 @@ enum SendRecv_Act {
 
 /**
  * Hash type for curl_hash_file, curl_hash_string
+ * Openssl_Hash_MD4, _MD2, _SHA and _RIPEMD160 are not supported.
  */
 enum Openssl_Hash {
 	Openssl_Hash_MD5 = 0,
-	Openssl_Hash_MD4,
-	Openssl_Hash_MD2,
-	Openssl_Hash_SHA,
+	Openssl_Hash_MD4,         /**< Not supported. */
+	Openssl_Hash_MD2,         /**< Not supported. */
+	Openssl_Hash_SHA,         /**< Not supported. */
 	Openssl_Hash_SHA1,
 	Openssl_Hash_SHA224,
 	Openssl_Hash_SHA256,
 	Openssl_Hash_SHA384,
 	Openssl_Hash_SHA512,
-	Openssl_Hash_RIPEMD160,
+	Openssl_Hash_RIPEMD160,   /**< Not supported. */
+	Openssl_Hash_SHA512_224,
+	Openssl_Hash_SHA512_256,
+	Openssl_Hash_SHA3_224,
+	Openssl_Hash_SHA3_256,
+	Openssl_Hash_SHA3_384,
+	Openssl_Hash_SHA3_512,
+	Openssl_Hash_BLAKE2B512,
+	Openssl_Hash_BLAKE2S256,
+	Openssl_Hash_SM3,
+	Openssl_Hash_KECCAK256,   /**< Keccak-256 as Ethereum uses it, not SHA3-256. */
+	Openssl_Hash_CRC32,       /**< zlib's CRC-32, big-endian; no HMAC. */
+	Openssl_Hash_ADLER32,     /**< zlib's Adler-32, big-endian; no HMAC. */
 };
 
 

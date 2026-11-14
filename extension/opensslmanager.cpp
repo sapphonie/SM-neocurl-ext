@@ -1,150 +1,19 @@
 #include "opensslmanager.h"
+#include "core/digest.h"
 #include <openssl/crypto.h>
-#include <openssl/md5.h>
-#include <openssl/md4.h>
-#include <openssl/md2.h>
-#include <openssl/sha.h>
-#include <openssl/ripemd.h>
 
-// NEED to convert this to using EVP one of these days...
-// https://www.openssl.org/docs/manmaster/man3/EVP_DigestInit.html
-// -sappho
+#include <memory>
+#include <string>
+#include <vector>
 
-#define	MD5_FILE_BUFFER_SIZE		1024*16
-// #define MD4_FILE_BUFFER_SIZE		1024*16
-// #define MD2_FILE_BUFFER_SIZE		1024*16
-// #define SHA_FILE_BUFFER_SIZE		1024*16
-#define SHA1_FILE_BUFFER_SIZE		1024*16
-#define SHA224_FILE_BUFFER_SIZE		1024*16
-#define SHA256_FILE_BUFFER_SIZE		1024*16
-#define SHA384_FILE_BUFFER_SIZE		1024*16
-#define SHA512_FILE_BUFFER_SIZE		1024*16
-// #define RIPEMD160_FILE_BUFFER_SIZE	1024*16
+/* The deprecated curl_hash_file and curl_hash_string, on the digests of
+ * core/digest.h, which Crypt (curl_crypt.inc) uses too. */
 
-#include <openssl/evp.h>
+#define HASH_FILE_BUFFER_SIZE		1024*16
+
 OpensslManager g_OpensslManager;
 
 static IMutex **ssl_lockarray;
-
-static void MD5_File(FILE *file, unsigned char **output, int *outlength)
-{
-	*output = new unsigned char[MD5_DIGEST_LENGTH];
-	*outlength = MD5_DIGEST_LENGTH;
-
-	MD5_CTX c;
-	int i;
-	unsigned char buf[MD5_FILE_BUFFER_SIZE];
-	
-	MD5_Init(&c);
-	for (;;)
-	{
-		i = fread(buf,1,MD5_FILE_BUFFER_SIZE,file);
-		if(i <= 0)
-			break;
-		MD5_Update(&c,buf,(unsigned long)i);
-	}
-	MD5_Final(*output, &c);
-}
-
-static void SHA1_File(FILE *file, unsigned char **output, int *outlength)
-{
-	*output = new unsigned char[SHA_DIGEST_LENGTH];
-	*outlength = SHA_DIGEST_LENGTH;
-
-	SHA_CTX c;
-	int i;
-	unsigned char buf[SHA1_FILE_BUFFER_SIZE];
-	
-	SHA1_Init(&c);
-	for (;;)
-	{
-		i = fread(buf,1,SHA1_FILE_BUFFER_SIZE,file);
-		if(i <= 0)
-			break;
-		SHA1_Update(&c,buf,(unsigned long)i);
-	}
-	SHA1_Final(*output, &c);
-}
-
-static void SHA224_File(FILE *file, unsigned char **output, int *outlength)
-{
-	*output = new unsigned char[SHA224_DIGEST_LENGTH];
-	*outlength = SHA224_DIGEST_LENGTH;
-
-	SHA256_CTX c;
-	int i;
-	unsigned char buf[SHA224_FILE_BUFFER_SIZE];
-	
-	SHA224_Init(&c);
-	for (;;)
-	{
-		i = fread(buf,1,SHA224_FILE_BUFFER_SIZE,file);
-		if(i <= 0)
-			break;
-		SHA224_Update(&c,buf,(unsigned long)i);
-	}
-	SHA224_Final(*output, &c);
-}
-
-static void SHA256_File(FILE *file, unsigned char **output, int *outlength)
-{
-	*output = new unsigned char[SHA256_DIGEST_LENGTH];
-	*outlength = SHA256_DIGEST_LENGTH;
-
-	SHA256_CTX c;
-	int i;
-	unsigned char buf[SHA256_FILE_BUFFER_SIZE];
-	
-	SHA256_Init(&c);
-	for (;;)
-	{
-		i = fread(buf,1,SHA256_FILE_BUFFER_SIZE,file);
-		if(i <= 0)
-			break;
-		SHA256_Update(&c,buf,(unsigned long)i);
-	}
-	SHA256_Final(*output, &c);
-}
-
-static void SHA384_File(FILE *file, unsigned char **output, int *outlength)
-{
-	*output = new unsigned char[SHA384_DIGEST_LENGTH];
-	*outlength = SHA384_DIGEST_LENGTH;
-
-	SHA512_CTX c;
-	int i;
-	unsigned char buf[SHA384_FILE_BUFFER_SIZE];
-	
-	SHA384_Init(&c);
-	for (;;)
-	{
-		i = fread(buf,1,SHA384_FILE_BUFFER_SIZE,file);
-		if(i <= 0)
-			break;
-		SHA384_Update(&c,buf,(unsigned long)i);
-	}
-	SHA384_Final(*output, &c);
-}
-
-static void SHA512_File(FILE *file, unsigned char **output, int *outlength)
-{
-	*output = new unsigned char[SHA512_DIGEST_LENGTH];
-	*outlength = SHA512_DIGEST_LENGTH;
-
-	SHA512_CTX c;
-	int i;
-	unsigned char buf[SHA512_FILE_BUFFER_SIZE];
-
-	SHA512_Init(&c);
-	for (;;)
-	{
-		i = fread(buf,1,SHA512_FILE_BUFFER_SIZE,file);
-		if(i <= 0)
-			break;
-		SHA512_Update(&c,buf,(unsigned long)i);
-	}
-	SHA512_Final(*output, &c);
-}
 
 static void ssl_locking_callback(int mode, int type, const char *file, int line)
 {
@@ -191,67 +60,46 @@ void OpensslManager::SDK_OnUnload()
 }
 
 
+static bool CopyDigest(const std::string &digest, unsigned char *output, int *outlength)
+{
+	if(digest.empty())
+		return false;
+	memcpy(output, digest.data(), digest.size());
+	*outlength = (int)digest.size();
+	return true;
+}
+
 bool OpensslManager::HashFile(Openssl_Hash algorithm, FILE *pFile, unsigned char **output, int *outlength)
 {
 	if(pFile == NULL)
 		return false;
 
-	switch(algorithm)
+	std::unique_ptr<neocurl::Hasher> hasher = neocurl::CreateHasher((neocurl::Algorithm)algorithm, NULL);
+	if(!hasher)
+		return false;
+
+	std::vector<char> buffer(HASH_FILE_BUFFER_SIZE);
+	for(;;)
 	{
-		case Openssl_Hash_MD5:
-			MD5_File(pFile, output, outlength);
-			return true;
-		case Openssl_Hash_SHA1:
-			SHA1_File(pFile, output, outlength);
-			return true;
-		case Openssl_Hash_SHA224:
-			SHA224_File(pFile, output, outlength);
-			return true;
-		case Openssl_Hash_SHA256:
-			SHA256_File(pFile, output, outlength);
-			return true;
-		case Openssl_Hash_SHA384:
-			SHA384_File(pFile, output, outlength);
-			return true;
-		case Openssl_Hash_SHA512:
-			SHA512_File(pFile, output, outlength);
-			return true;
+		size_t length = fread(buffer.data(), 1, buffer.size(), pFile);
+		if(ferror(pFile) || !hasher->Update(buffer.data(), length))
+			return false;
+		if(length < buffer.size())
+			break;
 	}
 
-	return false;
+	std::string digest = hasher->Finish();
+	if(digest.empty())
+		return false;
+	*output = new unsigned char[digest.size()];
+	return CopyDigest(digest, *output, outlength);
 }
 
 
 bool OpensslManager::HashString(Openssl_Hash algorithm, unsigned char *input, int size, unsigned char *output, int *outlength)
 {
-	switch(algorithm)
-	{
-		case Openssl_Hash_MD5:
-			MD5(input, size, output);
-			*outlength = MD5_DIGEST_LENGTH;
-			return true;
-		case Openssl_Hash_SHA1:
-			SHA1(input, size, output);
-			*outlength = SHA_DIGEST_LENGTH;
-			return true;
-		case Openssl_Hash_SHA224:
-			SHA224(input, size, output);
-			*outlength = SHA224_DIGEST_LENGTH;
-			return true;
-		case Openssl_Hash_SHA256:
-			SHA256(input, size, output);
-			*outlength = SHA256_DIGEST_LENGTH;
-			return true;
-		case Openssl_Hash_SHA384:
-			SHA384(input, size, output);
-			*outlength = SHA384_DIGEST_LENGTH;
-			return true;
-		case Openssl_Hash_SHA512:
-			SHA512(input, size, output);
-			*outlength = SHA512_DIGEST_LENGTH;
-			return true;
-	}
-
-	return false;
+	std::string digest;
+	if(neocurl::DigestBytes((neocurl::Algorithm)algorithm, NULL, input, size, digest) != neocurl::DigestError::None)
+		return false;
+	return CopyDigest(digest, output, outlength);
 }
-

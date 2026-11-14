@@ -161,6 +161,19 @@ enum Openssl_Hash
     Openssl_Hash_SHA384,
     Openssl_Hash_SHA512,
     Openssl_Hash_DEPRECATED_RIPEMD160_UNUSABLE,
+    // The values of neocurl::Algorithm (core/digest.h) from here on.
+    Openssl_Hash_SHA512_224,
+    Openssl_Hash_SHA512_256,
+    Openssl_Hash_SHA3_224,
+    Openssl_Hash_SHA3_256,
+    Openssl_Hash_SHA3_384,
+    Openssl_Hash_SHA3_512,
+    Openssl_Hash_BLAKE2B512,
+    Openssl_Hash_BLAKE2S256,
+    Openssl_Hash_SM3,
+    Openssl_Hash_KECCAK256,
+    Openssl_Hash_CRC32,
+    Openssl_Hash_ADLER32,
 };
 
 struct Openssl_Hash_pack {
