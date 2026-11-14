@@ -362,6 +362,10 @@ class ExtensionConfig(object):
       ]
     else:
       compiler.postlink += ['-Wl,--start-group'] + libraries + ['-Wl,--end-group', '-lpthread', '-ldl', '-lrt']
+      # 32-bit OpenSSL uses 64-bit atomics, which x86 has only through libatomic; linked in, since servers may
+      # not have its shared library.
+      if compiler.target.arch == 'x86':
+        compiler.postlink += ['-l:libatomic.a']
 
   def ExtLibrary(self, context, compiler, name):
     binary = self.Library(context, compiler, name)
