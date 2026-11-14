@@ -121,7 +121,8 @@ enum SendRecv_Act {
 };
 
 /**
- * Hash type for curl_hash_file, curl_hash_string
+ * Hash type for Crypt (curl_crypt.inc) and the deprecated curl_hash_file,
+ * curl_hash_string.
  * Openssl_Hash_MD4, _MD2, _SHA and _RIPEMD160 are not supported.
  */
 enum Openssl_Hash {
@@ -545,6 +546,7 @@ native void curl_slist_append(Handle hndl, const char[] buffer);
  * @ param cell_t					value				Value to set.
  * @ noreturn
  */
+#pragma deprecated Use Crypt.HashFile (curl_crypt.inc) instead
 native void curl_hash_file(const char[] file, Openssl_Hash algorithm, Openssl_Hash_Complete complete_callback, any value=0);
 
 /**
@@ -556,11 +558,13 @@ native void curl_hash_file(const char[] file, Openssl_Hash algorithm, Openssl_Ha
  * @ param cell_t			maxlen			Destination buffer length (includes null terminator).
  * @ return									1 on success
  */
+#pragma deprecated Use Crypt.HashString (curl_crypt.inc) instead
 native bool curl_hash_string(const char[] input, int dataSize, Openssl_Hash algorithm, char[] buffer, int maxlength);
 
 
 #include <curl_buffer>
 #include <curl_compression>
+#include <curl_crypt>
 #include <curl_websocket>
 
 

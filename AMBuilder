@@ -28,6 +28,7 @@ for cxx in builder.targets:
     os.path.join('extension', 'api.cpp'),
     os.path.join('extension', 'buffer_natives.cpp'),
     os.path.join('extension', 'compression_natives.cpp'),
+    os.path.join('extension', 'crypt_natives.cpp'),
     os.path.join('extension', 'websocket_natives.cpp'),
     os.path.join('extension', 'sdk', 'smsdk_ext.cpp'),
   ]

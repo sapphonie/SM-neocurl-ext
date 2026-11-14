@@ -1,7 +1,7 @@
-/* The SourceMod side of the CurlBuffer, Compression and WebSocket APIs
- * (curl_buffer.inc, curl_compression.inc, curl_websocket.inc): their handle
- * types, the worker pool of the queued jobs and the game frame hook that
- * calls the plugins back. */
+/* The SourceMod side of the CurlBuffer, Compression, Crypt and WebSocket
+ * APIs (curl_buffer.inc, curl_compression.inc, curl_crypt.inc,
+ * curl_websocket.inc): their handle types, the worker pools of the queued
+ * jobs and the game frame hook that calls the plugins back. */
 #ifndef _INCLUDE_NEOCURL_API_H_
 #define _INCLUDE_NEOCURL_API_H_
 
@@ -72,6 +72,7 @@ struct PendingCallback {
 
 enum class PoolKind {
 	Compression,
+	Crypt,
 };
 
 /* Queues task on a pool; its result calls callback on a later frame unless
@@ -85,6 +86,7 @@ void Unload();
 /* Natives and per-frame work of the areas, in their own files. */
 extern const sp_nativeinfo_t g_BufferNatives[];
 extern const sp_nativeinfo_t g_CompressionNatives[];
+extern const sp_nativeinfo_t g_CryptNatives[];
 extern const sp_nativeinfo_t g_WebSocketNatives[];
 
 extern HandleType_t g_CurlBufferType;

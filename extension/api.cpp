@@ -21,6 +21,7 @@ namespace {
 const char kBufferMaxBytesKey[] = "CurlBufferMaxBytes";
 constexpr size_t kDefaultBufferMaxBytes = 256 * 1024 * 1024;
 constexpr size_t kCompressionThreads = 2;
+constexpr size_t kCryptThreads = 2;
 
 /* Destroys the objects behind the handles of this file's types and drops
  * the callbacks of plugins that unload. */
@@ -48,6 +49,7 @@ public:
 Dispatcher g_Dispatcher;
 
 std::unique_ptr<neocurl::Pool> g_CompressionPool;
+std::unique_ptr<neocurl::Pool> g_CryptPool;
 std::unordered_map<neocurl::TaskId, PendingCallback> g_Pending;
 neocurl::TaskId g_NextTaskId = 1;
 
@@ -114,6 +116,7 @@ void DeliverResults(neocurl::Pool &pool)
 void OnGameFrame(bool simulating)
 {
 	DeliverResults(*g_CompressionPool);
+	DeliverResults(*g_CryptPool);
 	WebSocketsOnFrame();
 }
 
@@ -206,11 +209,12 @@ bool ReadCallback(IPluginContext *context, cell_t function, const char *argument
 	return false;
 }
 
-void SubmitJob(PoolKind, neocurl::Task task, PendingCallback callback)
+void SubmitJob(PoolKind pool, neocurl::Task task, PendingCallback callback)
 {
 	neocurl::TaskId id = g_NextTaskId++;
 	g_Pending.emplace(id, std::move(callback));
-	g_CompressionPool->Submit(id, std::move(task));
+	neocurl::Pool &target = pool == PoolKind::Compression ? *g_CompressionPool : *g_CryptPool;
+	target.Submit(id, std::move(task));
 }
 
 bool Load(char *error, size_t maxlength)
@@ -225,9 +229,11 @@ bool Load(char *error, size_t maxlength)
 		return false;
 
 	g_CompressionPool = std::make_unique<neocurl::Pool>(kCompressionThreads);
+	g_CryptPool = std::make_unique<neocurl::Pool>(kCryptThreads);
 
 	sharesys->AddNatives(myself, g_BufferNatives);
 	sharesys->AddNatives(myself, g_CompressionNatives);
+	sharesys->AddNatives(myself, g_CryptNatives);
 	sharesys->AddNatives(myself, g_WebSocketNatives);
 	plsys->AddPluginsListener(&g_Dispatcher);
 	smutils->AddGameFrameHook(OnGameFrame);
@@ -240,6 +246,7 @@ void Unload()
 	plsys->RemovePluginsListener(&g_Dispatcher);
 	WebSocketsShutdown();
 	g_CompressionPool.reset();
+	g_CryptPool.reset();
 	g_Pending.clear();
 	if (g_WebSocketType)
 		handlesys->RemoveType(g_WebSocketType, myself_Identity);
