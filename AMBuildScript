@@ -373,6 +373,30 @@ class ExtensionConfig(object):
     self.LinkDeps(binary.compiler)
     return binary
 
+  # The SourceMod-free code in extension/core, shared by the extension and its unit tests.
+  def CoreSources(self):
+    names = ['codec.cpp', 'digest.cpp', 'encoding.cpp', 'paths.cpp', 'platform.cpp', 'pool.cpp',
+             'websocket_session.cpp']
+    return [os.path.join(builder.sourcePath, 'extension', 'core', name) for name in names]
+
+  # A program of the unit tests for one target, linked like the extension.
+  def TestProgram(self, compiler, name):
+    compiler = compiler.clone()
+    SetArchFlags(compiler)
+    binary = compiler.Program(name)
+    for flag in ['-static-libgcc', '-lgcc_eh']:
+      if flag in binary.compiler.linkflags:
+        binary.compiler.linkflags.remove(flag)
+    if binary.compiler.like('gcc'):
+      binary.compiler.cflags += ['-Wno-deprecated-declarations']
+      binary.compiler.linkflags += ['-lpthread']
+    binary.compiler.cxxincludes += [
+      os.path.join(builder.sourcePath, 'extension'),
+      os.path.join(self.DepsPrefix(binary.compiler), 'include'),
+    ]
+    self.LinkDeps(binary.compiler)
+    return binary
+
   def AddCxxCompat(self, binary):
     if binary.compiler.target.platform == 'linux':
       binary.sources += [
@@ -389,6 +413,7 @@ builder.targets = builder.CloneableList(Extension.all_targets)
 
 BuildScripts = [
   'AMBuilder',
+  'extension/tests/AMBuilder',
 ]
 
 if builder.backend == 'amb2':

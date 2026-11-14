@@ -12,7 +12,7 @@ for cxx in builder.targets:
   ]
 
   if binary.compiler.like('gcc'):
-    binary.compiler.cxxflags += ['-fno-exceptions', '-fno-rtti']
+    binary.compiler.cxxflags += ['-fno-rtti']
     # The hash natives use OpenSSL's MD5/SHA functions, deprecated since OpenSSL 3.
     binary.compiler.cflags += ['-Wno-deprecated-declarations']
   elif binary.compiler.like('msvc'):
@@ -27,5 +27,6 @@ for cxx in builder.targets:
     os.path.join('extension', 'opensslthread.cpp'),
     os.path.join('extension', 'sdk', 'smsdk_ext.cpp'),
   ]
+  binary.sources += Extension.CoreSources()
 
   Extension.extensions += [builder.Add(binary)]

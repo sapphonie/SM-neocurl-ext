@@ -1,0 +1,11 @@
+# vim: set sts=2 ts=8 sw=2 tw=99 et ft=python:
+#
+# The unit tests of extension/core, one program per architecture, without
+# SourceMod.
+import os
+
+for cxx in builder.targets:
+  binary = Extension.TestProgram(cxx, 'curl-tests')
+  binary.sources += Extension.CoreSources()
+  binary.sources += [os.path.join(builder.sourcePath, 'extension', 'tests', 'tests.cpp')]
+  builder.Add(binary)

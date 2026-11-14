@@ -95,6 +95,14 @@ jobs:
             --sm-path=../../sourcemod --mms-path=../../metamod
           ambuild
 
+      - name: Run the unit tests
+        working-directory: extension/build/extension/tests/curl-tests
+        run: |
+          for program in */curl-tests*; do
+            echo "== $program"
+            "./$program"
+          done
+
       - name: Check the glibc version the binaries need
         if: matrix.os == 'linux'
         working-directory: extension/build/package/addons/sourcemod/extensions
