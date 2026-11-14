@@ -1,0 +1,12 @@
+{
+  "name": "sm-neocurl",
+  "version": "2.1.0",
+  "builtin-baseline": "3e32077455d0ab8a87baaac61816e60f1719c1d6",
+  "dependencies": [
+    {
+      "name": "curl",
+      "default-features": false,
+      "features": ["openssl", "http2", "ssh", "brotli", "zstd", "psl", "websockets"]
+    }
+  ]
+}

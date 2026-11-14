@@ -1,0 +1,39 @@
+# vim: set ts=8 sts=2 sw=2 tw=99 et ft=python:
+import os
+
+builder.SetBuildFolder('package')
+
+folder_list = [
+  'addons/sourcemod/extensions',
+  'addons/sourcemod/scripting/include',
+  'addons/sourcemod/licenses/sm-neocurl',
+]
+
+if 'x86_64' in Extension.target_archs:
+  folder_list.append('addons/sourcemod/extensions/x64')
+
+folder_map = {}
+for folder in folder_list:
+  folder_map[folder] = builder.AddFolder(os.path.normpath(folder))
+
+# Binaries.
+for cxx_task in Extension.extensions:
+  if cxx_task.target.arch == 'x86_64':
+    builder.AddCopy(cxx_task.binary, folder_map['addons/sourcemod/extensions/x64'])
+  else:
+    builder.AddCopy(cxx_task.binary, folder_map['addons/sourcemod/extensions'])
+
+# Include files.
+for include in ['cURL.inc', 'cURL_header.inc']:
+  builder.AddCopy(os.path.join(builder.sourcePath, 'pawn', 'scripting', 'include', include),
+                  folder_map['addons/sourcemod/scripting/include'])
+
+# The license of every library linked in, as vcpkg installs it (share/<port>/copyright). The vcpkg-* ports are
+# build helpers and are not linked. Every target links the same ports, so the first target's prefix is enough.
+deps_share = os.path.join(Extension.DepsPrefix(Extension.all_targets[0]), 'share')
+licenses = os.path.normpath('addons/sourcemod/licenses/sm-neocurl')
+for port in sorted(os.listdir(deps_share)):
+  copyright = os.path.join(deps_share, port, 'copyright')
+  if port.startswith('vcpkg') or not os.path.isfile(copyright):
+    continue
+  builder.AddCopy(copyright, os.path.join(licenses, port + '.txt'))

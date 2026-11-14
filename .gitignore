@@ -1,9 +1,9 @@
 .vs
-sm-*
-mm-*
-test*
 Release/
 Debug/
-build
-build/*
+build/
 extension/CppProperties.json
+
+# vcpkg checkout and the dependencies build-deps.sh builds
+vcpkg/
+deps/

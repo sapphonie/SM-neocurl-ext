@@ -1,0 +1,186 @@
+# Builds the extension for Linux and Windows (x86 and x86_64) on every push, pull request and manual run, with its
+# dependencies built statically by vcpkg (build-deps.sh), and packs each platform into an archive that is laid out
+# like a game folder. For a pushed v* tag it also publishes these archives as a GitHub release, after checking that
+# the tag matches the version the extension reports.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  SOURCEMOD_BRANCH: 1.12-dev
+  METAMOD_BRANCH: 1.12-dev
+  # The binaries may require at most this glibc version.
+  MAX_GLIBC: '2.34'
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            runner: ubuntu-22.04
+          - os: windows
+            runner: windows-2022
+    defaults:
+      run:
+        shell: bash
+    env:
+      # build-deps.sh clones vcpkg at the baseline of vcpkg.json instead of using the runner's copy.
+      VCPKG_ROOT: ''
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-cache,readwrite
+
+    steps:
+      - name: Install Linux packages
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          # autoconf-archive and libltdl-dev for the autoreconf of libidn2
+          sudo apt-get install -yq --no-install-recommends clang gcc-multilib g++-multilib \
+            autoconf autoconf-archive automake libtool libltdl-dev
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: extension
+
+      - name: Checkout SourceMod
+        uses: actions/checkout@v4
+        with:
+          repository: alliedmodders/sourcemod
+          ref: ${{ env.SOURCEMOD_BRANCH }}
+          path: sourcemod
+          submodules: recursive
+
+      - name: Checkout Metamod:Source
+        uses: actions/checkout@v4
+        with:
+          repository: alliedmodders/metamod-source
+          ref: ${{ env.METAMOD_BRANCH }}
+          path: metamod
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install AMBuild
+        run: pip install git+https://github.com/alliedmodders/ambuild
+
+      - name: Restore the vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: vcpkg-cache
+          key: vcpkg-${{ matrix.os }}-${{ hashFiles('extension/vcpkg.json', 'extension/triplets/**') }}
+          restore-keys: vcpkg-${{ matrix.os }}-
+
+      - name: Build dependencies
+        run: extension/build-deps.sh
+
+      - name: Build
+        run: |
+          # On Windows AMBuild finds Visual Studio by itself.
+          if [ "${{ matrix.os }}" = linux ]; then
+            export CC=clang CXX=clang++
+          fi
+          mkdir extension/build
+          cd extension/build
+          python ../configure.py --enable-optimize --targets=x86,x86_64 \
+            --sm-path=../../sourcemod --mms-path=../../metamod
+          ambuild
+
+      - name: Check the glibc version the binaries need
+        if: matrix.os == 'linux'
+        working-directory: extension/build/package/addons/sourcemod/extensions
+        run: |
+          for binary in curl.ext.so x64/curl.ext.so; do
+            needed=$(objdump -T "$binary" | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -uV | tail -1)
+            echo "$binary needs glibc $needed"
+            if [ "$(printf '%s\n%s\n' "$needed" "$MAX_GLIBC" | sort -V | tail -1)" != "$MAX_GLIBC" ]; then
+              echo "::error::$binary needs glibc $needed, more than $MAX_GLIBC"
+              exit 1
+            fi
+          done
+
+      - name: Pack
+        id: pack
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            label="$GITHUB_REF_NAME"
+          else
+            label="${GITHUB_SHA::7}"
+          fi
+
+          mkdir stage
+          cp -r extension/build/package/addons stage/
+          if [ "${{ matrix.os }}" = linux ]; then
+            for binary in stage/addons/sourcemod/extensions/curl.ext.so stage/addons/sourcemod/extensions/x64/curl.ext.so; do
+              strip --strip-debug "$binary"
+            done
+          fi
+
+          cd stage
+          if [ "${{ matrix.os }}" = linux ]; then
+            archive="sm-neocurl-$label-linux.tar.gz"
+            tar -czf "../$archive" addons
+          else
+            archive="sm-neocurl-$label-windows.zip"
+            7z a -tzip "../$archive" addons > /dev/null
+          fi
+          cd ..
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          echo "Contents of $archive:"
+          find stage -type f | sort
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: sm-neocurl-${{ matrix.os }}
+          path: ${{ steps.pack.outputs.archive }}
+          if-no-files-found: error
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check that the tag matches the extension version
+        run: |
+          # Tag vX.Y.Z belongs to SMEXT_CONF_VERSION "X.Y.Z".
+          tag="$GITHUB_REF_NAME"
+          actual=$(sed -n 's/^#define SMEXT_CONF_VERSION[[:space:]]*"\(.*\)"/\1/p' extension/sdk/smsdk_config.h)
+          if [ "$tag" != "v$actual" ]; then
+            echo "::error::Tag $tag does not match extension/sdk/smsdk_config.h, which says $actual (tag v$actual)"
+            exit 1
+          fi
+          echo "Version $actual matches tag $tag"
+
+      - name: Download archives
+        uses: actions/download-artifact@v4
+        with:
+          path: archives
+          pattern: sm-neocurl-*
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" archives/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag

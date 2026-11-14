@@ -1,0 +1,396 @@
+# vim: set sts=2 ts=8 sw=2 tw=99 et ft=python:
+import os, re, shutil
+
+def ResolveEnvPath(env, folder):
+  if env in os.environ:
+    path = os.environ[env]
+    if os.path.isdir(path):
+      return path
+    return None
+
+  head = os.getcwd()
+  oldhead = None
+  while head != None and head != oldhead:
+    path = os.path.join(head, folder)
+    if os.path.isdir(path):
+      return path
+    oldhead = head
+    head, tail = os.path.split(head)
+
+  return None
+
+def Normalize(path):
+  return os.path.abspath(os.path.normpath(path))
+  
+def SetArchFlags(compiler):
+  if compiler.behavior == 'gcc':
+    if compiler.target.arch == 'x86_64':
+      compiler.cflags += ['-fPIC']
+  elif compiler.like('msvc'):
+    if compiler.target.arch == 'x86_64':
+      compiler.defines += ['WIN64']
+
+class ExtensionConfig(object):
+  def __init__(self):
+    self.extensions = []
+    self.generated_headers = None
+    self.sm_root = None
+    self.all_targets = []
+    self.target_archs = set()
+    self.mms_root = None
+    self.deps_root = None
+
+    if builder.options.targets:
+      target_archs = builder.options.targets.split(',')
+    else:
+      target_archs = ['x86']
+      if builder.backend != 'amb2':
+        target_archs.append('x86_64')
+
+    for arch in target_archs:
+        try:
+            cxx = builder.DetectCxx(target_arch = arch)
+            self.target_archs.add(cxx.target.arch)
+        except Exception as e:
+            # Error if archs were manually overridden.
+            if builder.options.targets:
+                raise
+            print('Skipping target {}: {}'.format(arch, e))
+            continue
+        self.all_targets.append(cxx)
+
+    if not self.all_targets:
+        raise Exception('No suitable C/C++ compiler was found.')
+
+  # The extension uses only SourceMod's extension API and Metamod's SourceHook containers, no game or engine code,
+  # so it is built once per platform and architecture instead of once per game.
+  def detectPaths(self):
+    if builder.options.sm_path:
+      self.sm_root = builder.options.sm_path
+    else:
+      self.sm_root = ResolveEnvPath('SOURCEMOD112', 'sourcemod-1.12')
+      if not self.sm_root:
+        self.sm_root = ResolveEnvPath('SOURCEMOD_DEV', 'sourcemod')
+      if not self.sm_root:
+        self.sm_root = ResolveEnvPath('SOURCEMOD_DEV', 'sourcemod-central')
+
+    if not self.sm_root or not os.path.isdir(self.sm_root):
+      raise Exception('Could not find a source copy of SourceMod')
+    self.sm_root = Normalize(self.sm_root)
+
+    if builder.options.mms_path:
+      self.mms_root = builder.options.mms_path
+    else:
+      self.mms_root = ResolveEnvPath('MMSOURCE112', 'mmsource-1.12')
+      if not self.mms_root:
+        self.mms_root = ResolveEnvPath('MMSOURCE_DEV', 'metamod-source')
+      if not self.mms_root:
+        self.mms_root = ResolveEnvPath('MMSOURCE_DEV', 'mmsource-central')
+
+    if not self.mms_root or not os.path.isdir(self.mms_root):
+      raise Exception('Could not find a source copy of Metamod:Source')
+    self.mms_root = Normalize(self.mms_root)
+
+    if builder.options.deps_path:
+      self.deps_root = Normalize(builder.options.deps_path)
+    else:
+      self.deps_root = os.path.join(builder.sourcePath, 'deps')
+
+  # The vcpkg install prefix of the static libraries for one target, as build-deps.sh lays it out.
+  def DepsPrefix(self, cxx):
+    triplets = {
+      ('linux', 'x86'): 'x86-linux',
+      ('linux', 'x86_64'): 'x64-linux',
+      ('windows', 'x86'): 'x86-windows-static',
+      ('windows', 'x86_64'): 'x64-windows-static',
+    }
+    key = (cxx.target.platform, cxx.target.arch)
+    if key not in triplets:
+      raise Exception('No dependency build for {0} {1}'.format(*key))
+    triplet = triplets[key]
+    prefix = os.path.join(self.deps_root, triplet, triplet)
+    if not os.path.isdir(os.path.join(prefix, 'lib')):
+      raise Exception('Missing the static libraries for {0} in {1}; run build-deps.sh {0}'.format(triplet, prefix))
+    return prefix
+
+  def configure(self):
+    
+    allowed_archs = ['x86','x86_64']
+
+    if not set(self.target_archs).issubset(allowed_archs):
+      raise Exception('Unknown target architecture: {0}'.format(self.target_archs))
+
+    for cxx in self.all_targets:
+        self.configure_cxx(cxx)
+
+  def configure_cxx(self, cxx):
+    if cxx.family == 'msvc':
+      if cxx.version < 1914 and builder.options.generator != 'vs':
+        raise Exception(f'Only MSVC 2017 15.7 and later are supported, full C++17 support is required. ({str(cxx.version)} < 1914)')
+    elif cxx.family == 'gcc':
+      if cxx.version < 'gcc-9':
+        raise Exception('Only GCC versions 9 or later are supported, full C++17 support is required.')
+    elif cxx.family == 'clang':
+      if cxx.version < 'clang-5':
+        raise Exception('Only clang versions 5 or later are supported, full C++17 support is required.')
+
+    if cxx.like('gcc'):
+      self.configure_gcc(cxx)
+    elif cxx.family == 'msvc':
+      self.configure_msvc(cxx)
+
+    # Optimizaiton
+    if builder.options.opt == '1':
+      cxx.defines += ['NDEBUG']
+
+    # Debugging
+    if builder.options.debug == '1':
+      cxx.defines += ['DEBUG', '_DEBUG']
+
+    # Platform-specifics
+    if cxx.target.platform == 'linux':
+      self.configure_linux(cxx)
+    elif cxx.target.platform == 'windows':
+      self.configure_windows(cxx)
+
+    cxx.includes += [
+      os.path.join(self.sm_root, 'public'),
+    ]
+
+  def configure_gcc(self, cxx):
+    cxx.defines += [
+      'stricmp=strcasecmp',
+      '_stricmp=strcasecmp',
+      '_snprintf=snprintf',
+      '_vsnprintf=vsnprintf',
+      'HAVE_STDINT_H',
+      'GNUC',
+    ]
+    cxx.cflags += [
+      '-pipe',
+      '-fno-strict-aliasing',
+      '-Wall',
+      #'-Werror',
+      '-Wno-unused',
+      '-Wno-switch',
+      '-Wno-array-bounds',
+      '-fvisibility=hidden',
+    ]
+    if cxx.target.arch in ['x86', 'x86_64']:
+      cxx.cflags += ['-msse']
+
+    cxx.cxxflags += ['-std=c++17']
+
+    cxx.cxxflags += [
+      '-fno-threadsafe-statics',
+      '-Wno-non-virtual-dtor',
+      '-Wno-overloaded-virtual',
+      '-Wno-register',
+      '-fvisibility-inlines-hidden',
+    ]
+
+    have_gcc = cxx.family == 'gcc'
+    have_clang = cxx.family == 'clang'
+    if cxx.version >= 'clang-3.9' or cxx.version == 'clang-3.4' or cxx.version > 'apple-clang-6.0':
+      cxx.cxxflags += ['-Wno-expansion-to-defined']
+    if cxx.version == 'clang-3.9' or cxx.version == 'apple-clang-8.0':
+      cxx.cflags += ['-Wno-varargs']
+    if cxx.version >= 'clang-3.4' or cxx.version >= 'apple-clang-7.0':
+      cxx.cxxflags += ['-Wno-inconsistent-missing-override']
+    if cxx.version >= 'clang-2.9' or cxx.version >= 'apple-clang-3.0':
+      cxx.cxxflags += ['-Wno-null-dereference']
+    if have_clang or (cxx.version >= 'gcc-4.6'):
+      cxx.cflags += ['-Wno-narrowing']
+    if have_clang or (cxx.version >= 'gcc-4.7'):
+      cxx.cxxflags += ['-Wno-delete-non-virtual-dtor']
+    if cxx.version >= 'gcc-4.8':
+      cxx.cflags += ['-Wno-unused-result']
+    if cxx.version >= 'gcc-9.0':
+      cxx.cxxflags += ['-Wno-class-memaccess', '-Wno-packed-not-aligned']
+    if have_clang:
+      cxx.cxxflags += ['-Wno-implicit-exception-spec-mismatch']
+      if cxx.version >= 'apple-clang-5.1' or cxx.version >= 'clang-3.4':
+        cxx.cxxflags += ['-Wno-deprecated-register']
+      else:
+        cxx.cxxflags += ['-Wno-deprecated']
+      cxx.cflags += ['-Wno-sometimes-uninitialized']
+
+    # Work around SDK warnings.
+    if cxx.version >= 'clang-10.0' or cxx.version >= 'apple-clang-12.0':
+        cxx.cflags += [
+            '-Wno-implicit-int-float-conversion',
+            '-Wno-tautological-overlap-compare',
+        ]
+
+    if have_gcc:
+      cxx.cflags += ['-mfpmath=sse']
+      cxx.cflags += ['-Wno-maybe-uninitialized']
+
+    if builder.options.opt == '1':
+        cxx.cflags += ['-O3']
+    elif cxx.like('gcc'):
+        cxx.cflags += ['-Og']
+
+    # Don't omit the frame pointer.
+    cxx.cflags += ['-fno-omit-frame-pointer']
+
+  def configure_msvc(self, cxx):
+
+    if builder.options.debug == '1':
+      cxx.cflags += ['/MTd']
+      cxx.linkflags += ['/NODEFAULTLIB:libcmt']
+    else:
+      cxx.cflags += ['/MT']
+    cxx.defines += [
+      '_CRT_SECURE_NO_DEPRECATE',
+      '_CRT_SECURE_NO_WARNINGS',
+      '_CRT_NONSTDC_NO_DEPRECATE',
+      '_ITERATOR_DEBUG_LEVEL=0',
+    ]
+    cxx.cflags += [
+      '/W3',
+    ]
+    cxx.cxxflags += [
+      '/EHsc',
+      '/GR-',
+      '/TP',
+      '/std:c++17',
+    ]
+    cxx.linkflags += [
+      'kernel32.lib',
+      'user32.lib',
+      'gdi32.lib',
+      'winspool.lib',
+      'comdlg32.lib',
+      'advapi32.lib',
+      'shell32.lib',
+      'ole32.lib',
+      'oleaut32.lib',
+      'uuid.lib',
+      'odbc32.lib',
+      'odbccp32.lib',
+    ]
+
+    if builder.options.opt == '1':
+      cxx.cflags += ['/Ox', '/Zo']
+      cxx.linkflags += ['/OPT:ICF', '/OPT:REF']
+
+    if builder.options.debug == '1':
+      cxx.cflags += ['/Od', '/RTC1']
+
+    # This needs to be after our optimization flags which could otherwise disable it.
+    # Don't omit the frame pointer.
+    cxx.cflags += ['/Oy-']
+
+  def configure_linux(self, cxx):
+    cxx.defines += ['LINUX', '_LINUX', 'POSIX', '_FILE_OFFSET_BITS=64']
+    cxx.linkflags += ['-lm']
+    if cxx.family == 'gcc':
+      cxx.linkflags += ['-static-libgcc']
+    elif cxx.family == 'clang':
+      cxx.linkflags += ['-lgcc_eh']
+    cxx.linkflags += ['-static-libstdc++']
+
+  def configure_windows(self, cxx):
+    cxx.defines += ['WIN32', '_WINDOWS']
+    
+  # The version the extension reports (SMEXT_CONF_VERSION), the only place it is written down.
+  @property
+  def productVersion(self):
+    config = os.path.join(builder.sourcePath, 'extension', 'sdk', 'smsdk_config.h')
+    with open(config) as fp:
+      match = re.search(r'^#define\s+SMEXT_CONF_VERSION\s+"(\d+)\.(\d+)\.(\d+)"', fp.read(), re.M)
+    if not match:
+      raise Exception('No SMEXT_CONF_VERSION "X.Y.Z" in {0}'.format(config))
+    return match.groups()
+
+  def AddVersioning(self, binary):
+    if binary.compiler.target.platform != 'windows':
+      return binary
+    major, minor, patch = self.productVersion
+    binary.sources += [os.path.join(builder.sourcePath, 'version.rc')]
+    binary.compiler.rcdefines += [
+      'BINARY_NAME="{0}"'.format(binary.outputFile),
+      'VERSION_STRING="{0}.{1}.{2}"'.format(major, minor, patch),
+      'VERSION_FILE={0},{1},{2},0'.format(major, minor, patch),
+      'RC_COMPILE',
+    ]
+    return binary
+    
+  def LibraryBuilder(self, compiler, name):
+    binary = compiler.Library(name)
+    self.AddVersioning(binary)
+    if binary.compiler.like('msvc'):
+      binary.compiler.linkflags += ['/SUBSYSTEM:WINDOWS']
+    self.AddCxxCompat(binary)
+    return binary
+
+  def Library(self, context, compiler, name):
+    compiler = compiler.clone()
+    SetArchFlags(compiler)
+    return self.LibraryBuilder(compiler, name)
+
+  def ConfigureForExtension(self, context, compiler):
+    extension_root = os.path.join(builder.sourcePath, 'extension')
+    compiler.cxxincludes += [
+      extension_root,
+      os.path.join(extension_root, 'sdk'),
+      os.path.join(self.sm_root, 'public'),
+      os.path.join(self.sm_root, 'public', 'extensions'),
+      os.path.join(self.sm_root, 'sourcepawn', 'include'),
+      os.path.join(self.sm_root, 'public', 'amtl', 'amtl'),
+      os.path.join(self.sm_root, 'public', 'amtl'),
+    ]
+    compiler.cxxincludes += [
+      os.path.join(self.mms_root, 'core', 'sourcehook'),
+      os.path.join(self.DepsPrefix(compiler), 'include'),
+    ]
+    return compiler
+
+  # Links every static library of the target's dependency prefix. On Linux they go in one group, so their order
+  # does not matter; the system libraries they need follow.
+  def LinkDeps(self, compiler):
+    lib_dir = os.path.join(self.DepsPrefix(compiler), 'lib')
+    suffix = '.lib' if compiler.target.platform == 'windows' else '.a'
+    libraries = sorted(os.path.join(lib_dir, name) for name in os.listdir(lib_dir) if name.endswith(suffix))
+    if not libraries:
+      raise Exception('No static libraries in {0}'.format(lib_dir))
+
+    if compiler.target.platform == 'windows':
+      compiler.postlink += libraries + [
+        'ws2_32.lib', 'crypt32.lib', 'bcrypt.lib', 'iphlpapi.lib', 'secur32.lib', 'advapi32.lib', 'user32.lib',
+      ]
+    else:
+      compiler.postlink += ['-Wl,--start-group'] + libraries + ['-Wl,--end-group', '-lpthread', '-ldl', '-lrt']
+
+  def ExtLibrary(self, context, compiler, name):
+    binary = self.Library(context, compiler, name)
+    self.ConfigureForExtension(context, binary.compiler)
+    self.LinkDeps(binary.compiler)
+    return binary
+
+  def AddCxxCompat(self, binary):
+    if binary.compiler.target.platform == 'linux':
+      binary.sources += [
+        os.path.join(self.sm_root, 'public', 'amtl', 'compat', 'stdcxx.cpp'),
+      ]
+
+Extension = ExtensionConfig()
+Extension.detectPaths()
+Extension.configure()
+
+# This will clone the list and each cxx object as we recurse, preventing child
+# scripts from messing up global state.
+builder.targets = builder.CloneableList(Extension.all_targets)
+
+BuildScripts = [
+  'AMBuilder',
+]
+
+if builder.backend == 'amb2':
+  BuildScripts += [
+    'PackageScript',
+  ]
+
+builder.Build(BuildScripts, { 'Extension': Extension })
+

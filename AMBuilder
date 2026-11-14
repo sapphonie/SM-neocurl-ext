@@ -1,0 +1,31 @@
+# vim: set sts=2 ts=8 sw=2 tw=99 et ft=python:
+import os
+
+projectName = 'curl'
+
+for cxx in builder.targets:
+  binary = Extension.ExtLibrary(builder, cxx, projectName + '.ext')
+
+  binary.compiler.defines += [
+    'SOURCEMOD_BUILD',
+    'HAVE_STDINT_H',
+  ]
+
+  if binary.compiler.like('gcc'):
+    binary.compiler.cxxflags += ['-fno-exceptions', '-fno-rtti']
+    # The hash natives use OpenSSL's MD5/SHA functions, deprecated since OpenSSL 3.
+    binary.compiler.cflags += ['-Wno-deprecated-declarations']
+  elif binary.compiler.like('msvc'):
+    binary.compiler.cxxflags += ['/GR-']
+
+  binary.sources += [
+    os.path.join('extension', 'extension.cpp'),
+    os.path.join('extension', 'curlmanager.cpp'),
+    os.path.join('extension', 'curlthread.cpp'),
+    os.path.join('extension', 'natives.cpp'),
+    os.path.join('extension', 'opensslmanager.cpp'),
+    os.path.join('extension', 'opensslthread.cpp'),
+    os.path.join('extension', 'sdk', 'smsdk_ext.cpp'),
+  ]
+
+  Extension.extensions += [builder.Add(binary)]
