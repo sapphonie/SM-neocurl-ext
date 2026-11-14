@@ -1,6 +1,7 @@
 #include "extension.h"
 #include "curlmanager.h"
 #include "opensslmanager.h"
+#include "api.h"
 #include <curl/curl.h>
 
 cURL_SM g_cURL_SM;
@@ -78,6 +79,9 @@ bool cURL_SM::SDK_OnLoad(char *error, size_t maxlength, bool late)
 
 	sharesys->AddNatives(myself, g_cURLNatives);
 
+	if(!api::Load(error, maxlength))
+		return false;
+
 	g_cURLManager.SDK_OnLoad();
 
 	g_OpensslManager.SDK_OnLoad();
@@ -88,6 +92,8 @@ bool cURL_SM::SDK_OnLoad(char *error, size_t maxlength, bool late)
 void cURL_SM::SDK_OnUnload()
 {
 	shutdown = true;
+
+	api::Unload();
 
 	g_cURLManager.SDK_OnUnload();
 

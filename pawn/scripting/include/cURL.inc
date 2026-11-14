@@ -559,6 +559,9 @@ native void curl_hash_file(const char[] file, Openssl_Hash algorithm, Openssl_Ha
 native bool curl_hash_string(const char[] input, int dataSize, Openssl_Hash algorithm, char[] buffer, int maxlength);
 
 
+#include <curl_buffer>
+
+
 /**
  * Do not edit below this line!
  */
