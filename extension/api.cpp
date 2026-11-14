@@ -1,5 +1,7 @@
 #include "api.h"
 
+#include "core/paths.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -18,9 +20,11 @@ namespace {
 
 const char kBufferMaxBytesKey[] = "CurlBufferMaxBytes";
 constexpr size_t kDefaultBufferMaxBytes = 256 * 1024 * 1024;
+constexpr size_t kCompressionThreads = 2;
 
-/* Destroys the objects behind the handles of this file's types. */
-class Dispatcher : public IHandleTypeDispatch {
+/* Destroys the objects behind the handles of this file's types and drops
+ * the callbacks of plugins that unload. */
+class Dispatcher : public IHandleTypeDispatch, public IPluginsListener {
 public:
 	void OnHandleDestroy(HandleType_t type, void *object) override
 	{
@@ -37,9 +41,26 @@ public:
 		*size = static_cast<unsigned int>(sizeof(CurlBuffer) + static_cast<CurlBuffer *>(object)->bytes.capacity());
 		return true;
 	}
+
+	void OnPluginUnloaded(IPlugin *plugin) override;
 };
 
 Dispatcher g_Dispatcher;
+
+std::unique_ptr<neocurl::Pool> g_CompressionPool;
+std::unordered_map<neocurl::TaskId, PendingCallback> g_Pending;
+neocurl::TaskId g_NextTaskId = 1;
+
+void Dispatcher::OnPluginUnloaded(IPlugin *plugin)
+{
+	IPluginContext *context = plugin->GetBaseContext();
+	for (auto it = g_Pending.begin(); it != g_Pending.end();) {
+		if (it->second.context == context)
+			it = g_Pending.erase(it);
+		else
+			++it;
+	}
+}
 
 /* "CurlBufferMaxBytes" from core.cfg; the default when it is missing, and
  * with an error in the log when it is not a positive number. */
@@ -60,8 +81,39 @@ size_t ReadBufferMaxBytes()
 	return static_cast<size_t>(parsed);
 }
 
+void DeliverResults(neocurl::Pool &pool)
+{
+	for (neocurl::TaskResult &result : pool.TakeResults()) {
+		auto found = g_Pending.find(result.id);
+		if (found == g_Pending.end())
+			continue;
+		PendingCallback callback = std::move(found->second);
+		g_Pending.erase(found);
+
+		IPluginFunction *function;
+		if (!callback.context->GetFunctionByIdOrNull(callback.function, &function) || !function)
+			continue;
+
+		function->PushCell(result.error);
+		Handle_t output = 0;
+		if (callback.shape == CallbackShape::FilePaths) {
+			function->PushString(callback.inputPath.c_str());
+			function->PushString(callback.outputPath.c_str());
+		} else {
+			if (result.error == 0)
+				output = CreateBuffer(callback.context, std::move(result.output));
+			function->PushCell(static_cast<cell_t>(output));
+		}
+		function->PushCell(callback.data);
+		function->Execute(nullptr);
+		if (output)
+			FreeCallbackHandle(callback.context, output);
+	}
+}
+
 void OnGameFrame(bool simulating)
 {
+	DeliverResults(*g_CompressionPool);
 	WebSocketsOnFrame();
 }
 
@@ -130,6 +182,21 @@ bool ReadBytes(IPluginContext *context, cell_t address, cell_t length, const cha
 	return true;
 }
 
+bool ReadGamePath(IPluginContext *context, cell_t address, const char *argumentName, GamePath &path)
+{
+	char *text;
+	context->LocalToString(address, &text);
+	if (!neocurl::IsGameRelativePath(text)) {
+		context->ReportError("%s \"%s\" must be a path relative to the game directory: it must %s", argumentName,
+		                     text, neocurl::kPathRules);
+		return false;
+	}
+	char buffer[PLATFORM_MAX_PATH];
+	smutils->BuildPath(Path_Game, buffer, sizeof(buffer), "%s", text);
+	path = GamePath{text, buffer};
+	return true;
+}
+
 bool ReadCallback(IPluginContext *context, cell_t function, const char *argumentName)
 {
 	IPluginFunction *found;
@@ -137,6 +204,13 @@ bool ReadCallback(IPluginContext *context, cell_t function, const char *argument
 		return true;
 	context->ReportError("%s: invalid callback function %x", argumentName, function);
 	return false;
+}
+
+void SubmitJob(PoolKind, neocurl::Task task, PendingCallback callback)
+{
+	neocurl::TaskId id = g_NextTaskId++;
+	g_Pending.emplace(id, std::move(callback));
+	g_CompressionPool->Submit(id, std::move(task));
 }
 
 bool Load(char *error, size_t maxlength)
@@ -150,8 +224,12 @@ bool Load(char *error, size_t maxlength)
 	if (!g_WebSocketType)
 		return false;
 
+	g_CompressionPool = std::make_unique<neocurl::Pool>(kCompressionThreads);
+
 	sharesys->AddNatives(myself, g_BufferNatives);
+	sharesys->AddNatives(myself, g_CompressionNatives);
 	sharesys->AddNatives(myself, g_WebSocketNatives);
+	plsys->AddPluginsListener(&g_Dispatcher);
 	smutils->AddGameFrameHook(OnGameFrame);
 	return true;
 }
@@ -159,7 +237,10 @@ bool Load(char *error, size_t maxlength)
 void Unload()
 {
 	smutils->RemoveGameFrameHook(OnGameFrame);
+	plsys->RemovePluginsListener(&g_Dispatcher);
 	WebSocketsShutdown();
+	g_CompressionPool.reset();
+	g_Pending.clear();
 	if (g_WebSocketType)
 		handlesys->RemoveType(g_WebSocketType, myself_Identity);
 	if (g_CurlBufferType)

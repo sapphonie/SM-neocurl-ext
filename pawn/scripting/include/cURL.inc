@@ -560,6 +560,7 @@ native bool curl_hash_string(const char[] input, int dataSize, Openssl_Hash algo
 
 
 #include <curl_buffer>
+#include <curl_compression>
 #include <curl_websocket>
 
 
