@@ -12,6 +12,7 @@ namespace api {
 
 size_t g_BufferMaxBytes = 0;
 HandleType_t g_CurlBufferType = 0;
+HandleType_t g_WebSocketType = 0;
 
 namespace {
 
@@ -25,6 +26,8 @@ public:
 	{
 		if (type == g_CurlBufferType)
 			delete static_cast<CurlBuffer *>(object);
+		else if (type == g_WebSocketType)
+			WebSocketsOnHandleDestroy(object);
 	}
 
 	bool GetHandleApproxSize(HandleType_t type, void *object, unsigned int *size) override
@@ -55,6 +58,11 @@ size_t ReadBufferMaxBytes()
 		return kDefaultBufferMaxBytes;
 	}
 	return static_cast<size_t>(parsed);
+}
+
+void OnGameFrame(bool simulating)
+{
+	WebSocketsOnFrame();
 }
 
 HandleType_t CreateType(const char *name, char *error, size_t maxlength)
@@ -98,6 +106,12 @@ Handle_t CreateBuffer(IPluginContext *context, std::string bytes)
 	return handle;
 }
 
+void FreeCallbackHandle(IPluginContext *context, Handle_t handle)
+{
+	HandleSecurity security(context->GetIdentity(), myself_Identity);
+	handlesys->FreeHandle(handle, &security);
+}
+
 bool ReadBytes(IPluginContext *context, cell_t address, cell_t length, const char *argumentName, std::string &bytes)
 {
 	if (length < -1) {
@@ -116,6 +130,15 @@ bool ReadBytes(IPluginContext *context, cell_t address, cell_t length, const cha
 	return true;
 }
 
+bool ReadCallback(IPluginContext *context, cell_t function, const char *argumentName)
+{
+	IPluginFunction *found;
+	if (context->GetFunctionByIdOrNull(static_cast<funcid_t>(function), &found) && found)
+		return true;
+	context->ReportError("%s: invalid callback function %x", argumentName, function);
+	return false;
+}
+
 bool Load(char *error, size_t maxlength)
 {
 	g_BufferMaxBytes = ReadBufferMaxBytes();
@@ -123,15 +146,25 @@ bool Load(char *error, size_t maxlength)
 	g_CurlBufferType = CreateType("CurlBuffer", error, maxlength);
 	if (!g_CurlBufferType)
 		return false;
+	g_WebSocketType = CreateType("WebSocket", error, maxlength);
+	if (!g_WebSocketType)
+		return false;
 
 	sharesys->AddNatives(myself, g_BufferNatives);
+	sharesys->AddNatives(myself, g_WebSocketNatives);
+	smutils->AddGameFrameHook(OnGameFrame);
 	return true;
 }
 
 void Unload()
 {
+	smutils->RemoveGameFrameHook(OnGameFrame);
+	WebSocketsShutdown();
+	if (g_WebSocketType)
+		handlesys->RemoveType(g_WebSocketType, myself_Identity);
 	if (g_CurlBufferType)
 		handlesys->RemoveType(g_CurlBufferType, myself_Identity);
+	g_WebSocketType = 0;
 	g_CurlBufferType = 0;
 }
 
