@@ -218,7 +218,8 @@ static cell_t sm_curl_easy_getinfo_string(IPluginContext *pContext, const cell_t
 		code = curl_easy_getinfo(handle->curl, (CURLINFO)params[2], &string_buffer);
 		if(code == CURLE_OK)
 		{
-			pContext->StringToLocalUTF8(params[3], params[4], string_buffer, NULL);
+			// libcurl gives NULL when it has no value, e.g. no Content-Type
+			pContext->StringToLocalUTF8(params[3], params[4], string_buffer ? string_buffer : "", NULL);
 		}
 	}
 
