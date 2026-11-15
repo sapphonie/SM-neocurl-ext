@@ -17,6 +17,7 @@ addons/sourcemod/scripting/include/cURL_header.inc
 addons/sourcemod/scripting/include/curl_buffer.inc
 addons/sourcemod/scripting/include/curl_compression.inc
 addons/sourcemod/scripting/include/curl_crypt.inc
+addons/sourcemod/scripting/include/curl_modern.inc
 addons/sourcemod/scripting/include/curl_websocket.inc
 addons/sourcemod/licenses/sm-neocurl/              licenses of the linked libraries
 ```
@@ -36,6 +37,8 @@ default store as fallback. On Windows it uses the Windows certificate store. Plu
 
 `#include <cURL>` gives plugins all of it. Besides libcurl's easy interface (`curl_easy_*` natives), it has:
 
+- [CurlEasy, CurlSlist, CurlForm, CurlFile](docs/modern.md) (`curl_modern.inc`): methodmaps over the libcurl
+  natives, with shortcuts for the common options and results and the text of a failed transfer for logs.
 - [CurlBuffer](docs/buffer.md) (`curl_buffer.inc`): a byte buffer in the extension, for data larger than a plugin's
   own memory. Its size limit is `CurlBufferMaxBytes` in SourceMod's `core.cfg` (default 256 MB).
 - [WebSocket](docs/websocket.md) (`curl_websocket.inc`): `ws://` and `wss://` connections, one thread each, with
@@ -99,8 +102,9 @@ digests, encodings, paths, the worker pool) are built as `build/extension/tests/
 CI runs them for both architectures.
 
 `pawn/scripting/curl_ext_test.sp` tests the plugin API on a running server: `sm_curl_ext_test` prints a line per check;
-the WebSocket checks need an echo server at the URL in `curl_ext_test_ws_url` (in quotes on the console, since `//`
-starts a comment there).
+the WebSocket checks need an echo server at the URL in `curl_ext_test_ws_url`, the HTTP transfer of the methodmaps a
+URL that answers a GET with status 200 in `curl_ext_test_http_url` (both in quotes on the console, since `//` starts a
+comment there).
 
 ## Source layout
 
@@ -111,7 +115,7 @@ starts a comment there).
   worker pool and the WebSocket session thread.
 - `extension/tests/`: the unit tests of `extension/core/`.
 - `pawn/scripting/`: the include files and the test plugins.
-- `docs/`: the plugin API of CurlBuffer, WebSocket, Compression and Crypt.
+- `docs/`: the plugin API of the libcurl methodmaps, CurlBuffer, WebSocket, Compression and Crypt.
 
 ## Releases
 
