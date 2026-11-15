@@ -887,6 +887,24 @@ enum CURLcode {
   CURLE_RTSP_SESSION_ERROR,      /* 86 - mismatch of RTSP Session Ids */
   CURLE_FTP_BAD_FILE_LIST,       /* 87 - unable to parse FTP file list */
   CURLE_CHUNK_FAILED,            /* 88 - chunk callback reported error */
+  CURLE_NO_CONNECTION_AVAILABLE, /* 89 - No connection available, the
+                                    session is queued */
+  CURLE_SSL_PINNEDPUBKEYNOTMATCH, /* 90 - specified pinned public key did not
+                                     match */
+  CURLE_SSL_INVALIDCERTSTATUS,   /* 91 - invalid certificate status */
+  CURLE_HTTP2_STREAM,            /* 92 - stream error in HTTP/2 framing layer
+                                  */
+  CURLE_RECURSIVE_API_CALL,      /* 93 - an api function was called from
+                                    inside a callback */
+  CURLE_AUTH_ERROR,              /* 94 - an authentication function returned an
+                                    error */
+  CURLE_HTTP3,                   /* 95 - An HTTP/3 layer problem */
+  CURLE_QUIC_CONNECT_ERROR,      /* 96 - QUIC connection error */
+  CURLE_PROXY,                   /* 97 - proxy handshake error */
+  CURLE_SSL_CLIENTCERT,          /* 98 - client-side certificate required */
+  CURLE_UNRECOVERABLE_POLL,      /* 99 - poll/select returned fatal error */
+  CURLE_TOO_LARGE,               /* 100 - a value/data met its maximum */
+  CURLE_ECH_REQUIRED,            /* 101 - ECH tried but failed */
 
   CURL_LAST /* never use! */
 };

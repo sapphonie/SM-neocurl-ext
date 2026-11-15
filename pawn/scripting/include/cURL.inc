@@ -273,10 +273,10 @@ native bool curl_easy_setopt_int_array(Handle hndl, int[][] array, int array_siz
  *
  * @ param Handle		hndl	The handle of the curl to be used. May be INVALID_HANDLE if not essential.
  * @ param CURLoption	opt		The option to add (see enum CURLoption for details).
- * @ param String		buffer	The value to set the option to.
+ * @ param String		buffer	The value to set the option to, the number as decimal text.
  * @ return bool				1 on success. 0 = The option not accept string or unsupport.
  */
-native bool curl_easy_setopt_int64(Handle hndl, CURLoption opt, const char buffer);
+native bool curl_easy_setopt_int64(Handle hndl, CURLoption opt, const char[] buffer);
 
 /**
  * Set a curl option for CURLOPTTYPE_OBJECTPOINT type
@@ -566,6 +566,7 @@ native bool curl_hash_string(const char[] input, int dataSize, Openssl_Hash algo
 #include <curl_compression>
 #include <curl_crypt>
 #include <curl_websocket>
+#include <curl_modern>
 
 
 /**

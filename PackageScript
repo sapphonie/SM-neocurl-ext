@@ -25,7 +25,7 @@ for cxx_task in Extension.extensions:
 
 # Include files.
 for include in ['cURL.inc', 'cURL_header.inc', 'curl_buffer.inc', 'curl_compression.inc', 'curl_crypt.inc',
-                'curl_websocket.inc']:
+                'curl_modern.inc', 'curl_websocket.inc']:
   builder.AddCopy(os.path.join(builder.sourcePath, 'pawn', 'scripting', 'include', include),
                   folder_map['addons/sourcemod/scripting/include'])
 
