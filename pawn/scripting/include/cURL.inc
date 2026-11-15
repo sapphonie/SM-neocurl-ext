@@ -211,15 +211,35 @@ typeset Openssl_Hash_Complete
 }
 
 
+/**
+ * The callbacks of curl_easy_setopt_function().
+ *
+ * CURLOPT_WRITEFUNCTION: called for every piece of received data.
+ * @ param Handle	hndl		The curl handle
+ * @ param String	buffer		The received bytes; they may contain NUL
+ * @ param cell_t	bytes		The size of one item, always 1
+ * @ param cell_t	nmemb		The number of items, so the number of bytes in buffer
+ * @ param any		data		Data passed to curl_easy_setopt_function()
+ * @ return 					The number of bytes taken care of: bytes * nmemb.
+ * 								Any other number ends the transfer with CURLE_WRITE_ERROR.
+ *
+ * CURLOPT_READFUNCTION: called when libcurl wants data to send.
+ * @ param Handle	hndl		The curl handle
+ * @ param cell_t	bytes		The size of one item, always 1
+ * @ param cell_t	nmemb		The number of items, so the most bytes libcurl takes now
+ * @ param any		data		Data passed to curl_easy_setopt_function()
+ * @ return 					The number of bytes given with curl_set_send_buffer(),
+ * 								at most bytes * nmemb. 0 ends the upload.
+ */
 typeset CURL_Function_CB
 {
 	// CURLOPT_WRITEFUNCTION
-	function void (Handle hndl, const char[] buffer, const int bytes, const int nmemb);
-	function void (Handle hndl, const char[] buffer, const int bytes, const int nmemb, any data);
+	function int (Handle hndl, const char[] buffer, const int bytes, const int nmemb);
+	function int (Handle hndl, const char[] buffer, const int bytes, const int nmemb, any data);
 	
 	// CURLOPT_READFUNCTION
-	function void (Handle hndl, const int bytes, const int nmemb);
-	function void (Handle hndl, const int bytes, const int nmemb, any data);
+	function int (Handle hndl, const int bytes, const int nmemb);
+	function int (Handle hndl, const int bytes, const int nmemb, any data);
 }
 
 /*************************************************************************************************/
