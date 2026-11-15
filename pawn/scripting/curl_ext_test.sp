@@ -1,11 +1,13 @@
 /**
- * Tests the CurlBuffer, Compression, Crypt and WebSocket APIs of the cURL
- * extension on a running server.
+ * Tests the CurlBuffer, Compression, Crypt and WebSocket APIs and the
+ * methodmaps of curl_modern.inc of the cURL extension on a running server.
  *
  * sm_curl_ext_test runs every test and prints a line per check and a summary
  * to the server console. The WebSocket tests need an echo server (one that
  * sends every message back) at the URL in curl_ext_test_ws_url; they are
- * skipped while it is empty.
+ * skipped while it is empty. The HTTP transfer of the CurlEasy tests needs a
+ * URL that answers a GET with status 200 in curl_ext_test_http_url and is
+ * skipped while that is empty.
  */
 #pragma semicolon 1
 #pragma newdecls required
@@ -16,7 +18,7 @@
 public Plugin myinfo = {
 	name = "cURL extension test",
 	author = "davenonymous",
-	description = "Tests CurlBuffer, Compression, Crypt and WebSocket",
+	description = "Tests CurlBuffer, Compression, Crypt, WebSocket and the methodmaps",
 	version = "1.0.0",
 	url = "https://github.com/sapphonie/SM-neocurl-ext"
 };
@@ -25,6 +27,7 @@ public Plugin myinfo = {
 #define TEST_TEXT "rocket sticky uber medic scout rocket sticky uber medic scout rocket sticky uber"
 
 ConVar g_WebSocketUrl;
+ConVar g_HttpUrl;
 int g_Passed;
 int g_Failed;
 int g_Pending;
@@ -32,6 +35,7 @@ int g_Pending;
 public void OnPluginStart()
 {
 	g_WebSocketUrl = CreateConVar("curl_ext_test_ws_url", "", "URL of a WebSocket echo server for the WebSocket tests; empty skips them");
+	g_HttpUrl = CreateConVar("curl_ext_test_http_url", "", "URL that answers a GET with status 200 for the CurlEasy tests; empty skips the HTTP transfer");
 	RegServerCmd("sm_curl_ext_test", Command_Test, "Runs the tests of the cURL extension's new APIs");
 }
 
@@ -79,6 +83,9 @@ public Action Command_Test(int args)
 	TestCryptLater();
 	TestCompression();
 	TestWebSocket();
+	TestEasy();
+	TestEasyMissingFile();
+	TestEasyHttp();
 	Finished();
 	return Plugin_Handled;
 }
@@ -327,5 +334,109 @@ public void OnWsClose(WebSocket ws, CURLcode error, int code, const char[] reaso
 	Check(error == CURLE_OK && g_Echoes == 3, "websocket closed after the echoes");
 	Check(ws.State == WebSocketState_Closed || ws.State == WebSocketState_Closing, "websocket state at close");
 	delete ws;
+	Finished();
+}
+
+/* --- CurlEasy, CurlSlist, CurlForm, CurlFile --- */
+
+CurlSlist g_HttpHeaders;
+CurlFile g_HttpFile;
+
+void TestEasy()
+{
+	char text[256];
+	CurlEasy.Version(text, sizeof(text));
+	Check(StrContains(text, "libcurl/") == 0, "easy version");
+	CurlEasy.Protocols(text, sizeof(text));
+	Check(StrContains(text, "https") != -1, "easy protocols");
+	Check((CurlEasy.Features() & CURL_VERSION_SSL) != 0, "easy features");
+	CurlEasy.StrError(CURLE_ECH_REQUIRED, text, sizeof(text));
+	Check(text[0] != '\0' && StrContains(text, "nknown") == -1, "easy strerror of the newest code");
+
+	CurlEasy easy = new CurlEasy();
+	Check(easy != null, "easy create");
+	Check(easy.Escape("a b&c", text, sizeof(text)) && StrEqual(text, "a%20b%26c"), "easy escape");
+	Check(easy.Unescape("a%20b%26c", text, sizeof(text)) == 5 && StrEqual(text, "a b&c"), "easy unescape");
+	Check(easy.SetOptInt(CURLOPT_NOPROGRESS, 1) && easy.SetOptString(CURLOPT_REFERER, "test"), "easy setopt");
+	Check(easy.SetOptInt64(CURLOPT_POSTFIELDSIZE_LARGE, "3"), "easy setopt int64");
+	Check(!easy.SetOptString(CURLOPT_NOPROGRESS, "1"), "easy setopt of the wrong type");
+
+	CurlSlist headers = new CurlSlist();
+	headers.Append("X-Test: 1");
+	Check(headers != null && easy.SetHeaders(headers), "easy headers");
+
+	CurlForm form = new CurlForm();
+	Check(form.AddField("name", "contents") == CURL_FORMADD_OK, "form field");
+	Check(form.AddFile("upload", "addons/sourcemod/" ... TEST_DIR ... "/hash.txt", "text/plain", "abc.txt")
+	      == CURL_FORMADD_OK, "form file");
+	Check(form.AddFileContent("text", "addons/sourcemod/" ... TEST_DIR ... "/hash.txt") == CURL_FORMADD_OK,
+	      "form file content");
+	Check(easy.SetForm(form), "easy form");
+
+	Check(new CurlFile("addons/sourcemod/" ... TEST_DIR ... "/missing/file.txt", "rb") == null,
+	      "file that cannot be opened");
+	delete easy;
+	delete form;
+	delete headers;
+}
+
+void TestEasyMissingFile()
+{
+	CurlEasy easy = new CurlEasy();
+	easy.SetUrl("file:///curl_ext_test/missing.txt");
+	Started();
+	easy.PerformThread(OnMissingFileComplete);
+}
+
+public void OnMissingFileComplete(CurlEasy easy, CURLcode code)
+{
+	char error[256];
+	easy.GetError(code, error, sizeof(error));
+	Check(code == CURLE_FILE_COULDNT_READ_FILE && error[0] != '\0', "easy error of a missing file");
+	PrintToServer("[curl_ext_test] the error of the missing file: %s", error);
+	delete easy;
+	Finished();
+}
+
+void TestEasyHttp()
+{
+	char url[256];
+	g_HttpUrl.GetString(url, sizeof(url));
+	if (url[0] == '\0') {
+		PrintToServer("[curl_ext_test] SKIP HTTP transfer: curl_ext_test_http_url is empty");
+		return;
+	}
+
+	g_HttpHeaders = new CurlSlist();
+	g_HttpHeaders.Append("X-Test: 1");
+	g_HttpFile = new CurlFile("addons/sourcemod/" ... TEST_DIR ... "/http.txt", "wb");
+	Check(g_HttpFile != null, "file open for writing");
+
+	CurlEasy easy = new CurlEasy();
+	Check(easy.SetUrl(url) && easy.SetUserAgent("curl_ext_test") && easy.SetTimeout(20)
+	      && easy.SetFollowLocation(true) && easy.SetHeaders(g_HttpHeaders) && easy.SetWriteFile(g_HttpFile),
+	      "easy shortcuts");
+	Started();
+	easy.PerformThread(OnHttpComplete);
+}
+
+public void OnHttpComplete(CurlEasy easy, CURLcode code)
+{
+	char text[256];
+	easy.GetError(code, text, sizeof(text));
+	Check(code == CURLE_OK, "easy http transfer");
+	if (code != CURLE_OK)
+		PrintToServer("[curl_ext_test] the error of the http transfer: %s", text);
+	Check(easy.ResponseCode == 200, "easy response code");
+	Check(easy.TotalTime > 0.0, "easy total time");
+	Check(easy.GetEffectiveUrl(text, sizeof(text)) == CURLE_OK && StrContains(text, "http") == 0, "easy effective url");
+	Check(easy.GetContentType(text, sizeof(text)) == CURLE_OK, "easy content type");
+	delete easy;
+	delete g_HttpFile;
+	delete g_HttpHeaders;
+
+	char path[PLATFORM_MAX_PATH];
+	BuildPath(Path_SM, path, sizeof(path), "%s/http.txt", TEST_DIR);
+	Check(FileSize(path) > 0, "easy body written to the file");
 	Finished();
 }
