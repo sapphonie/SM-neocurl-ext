@@ -3,6 +3,7 @@
 
 #include "extension.h"
 #include "curlthread.h"
+#include <mutex>
 
 class cURLManager
 {
@@ -32,6 +33,15 @@ public:
 public:
 	void AddCloseHelperHandle(ICloseHelper *helper);
 	void RemoveCloseHelperHandle(ICloseHelper *helper);
+	// Whether a file, form or list can be freed now; if a transfer still
+	// uses it, it is marked and freed with the transfer's handle.
+	bool TryDeleteCloseHelper(ICloseHelper *helper);
+
+public:
+	// Guards the moment a transfer ends against the moment its handle is
+	// closed: cURLHandle::running and cURLHandle::destroyed are decided on
+	// together under this lock.
+	std::mutex handle_state_mutex;
 
 private:
 	bool waiting;

@@ -1,6 +1,7 @@
 #ifndef _INCLUDE_SOURCEMOD_EXTENSION_DEFINE_H_
 #define _INCLUDE_SOURCEMOD_EXTENSION_DEFINE_H_
 
+#include <atomic>
 #include <sh_list.h>
 #include <curl/curl.h>
 
@@ -76,7 +77,7 @@ enum UserData_Type
 };
 
 struct cURLHandle {
-	cURLHandle():curl(NULL),running(false),lasterror(CURLE_OK),opt_loaded(false),
+	cURLHandle():curl(NULL),running(false),destroyed(false),lasterror(CURLE_OK),opt_loaded(false),
 		thread(NULL),is_udp(false),sockextr(INVALID_SOCKET),send_timeout(60000),recv_timeout(60000)
 	{
 	}
@@ -87,6 +88,10 @@ struct cURLHandle {
 	SourceHook::List<cURLOpt_int64 *> opt_int64_list;
 	SourceHook::List<cURLOpt_pointer *> opt_pointer_list;
 	bool running;
+	// The plugin's Handle was closed (delete, or the plugin unloaded) while
+	// a transfer was running. From then on no callback of the plugin is
+	// called, the transfer is aborted and whoever ends it frees the handle.
+	std::atomic<bool> destroyed;
 	CURLcode lasterror;
 	bool opt_loaded;
 	IPluginFunction *callback_Function[cURL_CallBack_LAST];

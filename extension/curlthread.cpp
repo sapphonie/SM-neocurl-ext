@@ -28,7 +28,8 @@ static int wait_on_socket(curl_socket_t sockfd, bool for_recv, long timeout_ms)
 
 
 cURLThread::cURLThread(cURLHandle *_handle, cURLThread_Type _type):
-waiting(false),handle(_handle),type(_type),event(threader->MakeEventSignal()),
+waiting(false),action_waiting(false),action_signaled(false),aborted(false),
+handle(_handle),type(_type),event(threader->MakeEventSignal()),
 recv_buffer(NULL),recv_buffer_size(1024),_current_recv_buffer_size(0),last_iolen(0)
 
 {
@@ -81,7 +82,46 @@ void cURLThread::EventWait()
 
 bool cURLThread::IsWaiting()
 {
-	return waiting;
+	std::lock_guard<std::mutex> lock(action_mutex);
+	return waiting || action_waiting;
+}
+
+bool cURLThread::SignalAction(SendRecv_Act act)
+{
+	{
+		std::lock_guard<std::mutex> lock(action_mutex);
+		if(action_waiting)
+		{
+			SetSenRecvAction(act);
+			action_signaled = true;
+			action_cv.notify_all();
+			return true;
+		}
+	}
+
+	if(!waiting)
+		return false;
+
+	SetSenRecvAction(act);
+	EventSignal();
+	return true;
+}
+
+void cURLThread::Abort()
+{
+	std::lock_guard<std::mutex> lock(action_mutex);
+	aborted = true;
+	action_cv.notify_all();
+}
+
+bool cURLThread::WaitForAction()
+{
+	std::unique_lock<std::mutex> lock(action_mutex);
+	action_waiting = true;
+	action_cv.wait(lock, [this] { return action_signaled || aborted; });
+	action_waiting = false;
+	action_signaled = false;
+	return !aborted;
 }
 
 char *cURLThread::GetReceiveBuffer()
@@ -107,6 +147,12 @@ void cURLThread::SetSenRecvAction(SendRecv_Act act)
 
 void cURLThread::RunThread_Perform()
 {
+	if(handle->destroyed)
+	{
+		handle->lasterror = CURLE_ABORTED_BY_CALLBACK;
+		return;
+	}
+
 	g_cURLManager.LoadcURLOption(handle);
 
 	if(handle->lasterror != CURLE_OK)
@@ -128,7 +174,11 @@ static void curl_send_FramAction(void *data)
 	
 	IPluginFunction *pFunc = handle->callback_Function[cURL_CallBack_SEND];
 	assert((pFunc != NULL));
-	if(pFunc != NULL)
+	if(handle->destroyed)
+	{
+		thread->SetSenRecvAction(SendRecv_Act_GOTO_END);
+	}
+	else if(pFunc != NULL)
 	{
 		cell_t result;
 		pFunc->PushCell(handle->hndl);
@@ -152,7 +202,11 @@ static void curl_recv_FramAction(void *data)
 	
 	IPluginFunction *pFunc = handle->callback_Function[cURL_CallBack_RECV];
 	assert((pFunc != NULL));
-	if(pFunc != NULL)
+	if(handle->destroyed)
+	{
+		thread->SetSenRecvAction(SendRecv_Act_GOTO_END);
+	}
+	else if(pFunc != NULL)
 	{
 		cell_t result;
 		pFunc->PushCell(handle->hndl);
@@ -247,15 +301,24 @@ act_recv_no_wait:
 	
 sm_recv_frame:
 	smutils->AddFrameAction(curl_recv_FramAction, this);
-	goto act_wait;
+
+	EventWait();
+
+	if(g_cURL_SM.IsShutdown())
+		goto act_end;
+
+	goto select_action;
 
 
 /* Wait Action */
 act_wait:
 	if(g_cURL_SM.IsShutdown())
 		goto act_end;
-	
-	EventWait();
+
+	// Until the plugin's signal. Ends for good when the handle was closed
+	// or the extension unloads.
+	if(!WaitForAction())
+		goto act_end;
 
 	if(g_cURL_SM.IsShutdown())
 		goto act_end;
@@ -287,7 +350,15 @@ static void cUrl_Thread_Finish(void *data)
 
 	cURLThread *thread = (cURLThread*)data;
 	cURLHandle *handle = thread->GetHandle();
-		
+
+	// NULL: the handle was closed after the transfer ended and before this
+	// frame; it is freed already.
+	if(handle == NULL)
+	{
+		thread->EventSignal();
+		return;
+	}
+
 	IPluginFunction *pFunc = handle->callback_Function[cURL_CallBack_COMPLETE];
 	assert((pFunc != NULL));
 	if(pFunc != NULL)
@@ -298,12 +369,38 @@ static void cUrl_Thread_Finish(void *data)
 		pFunc->Execute(NULL);
 	}
 
+	// The callback may have closed the handle (GetHandle() is NULL then) or
+	// started the next transfer on it (it has another thread then). If
+	// neither, the handle must forget this thread, which ends now.
+	handle = thread->GetHandle();
+	if(handle != NULL && handle->thread == thread)
+	{
+		handle->thread = NULL;
+	}
+
 	thread->EventSignal();
 }
 
 void cURLThread::OnTerminate(IThreadHandle *pHandle, bool cancel)
 {
-	handle->running = false;
+	bool destroyed;
+	{
+		std::lock_guard<std::mutex> lock(g_cURLManager.handle_state_mutex);
+		handle->running = false;
+		destroyed = handle->destroyed;
+	}
+
+	// The handle was closed during the transfer: its plugin gets no
+	// callback (it may be unloaded). Nothing else knows the handle anymore,
+	// so it is freed here, without waiting for a game frame that may never
+	// come for this thread when the extension unloads.
+	if(destroyed)
+	{
+		g_cURLManager.RemovecURLHandle(handle);
+		delete this;
+		return;
+	}
+
 	if(!g_cURL_SM.IsShutdown())
 	{
 		smutils->AddFrameAction(cUrl_Thread_Finish, this);

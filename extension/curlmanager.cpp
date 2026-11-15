@@ -66,13 +66,19 @@ static void sm_write_function_FrameAction(void *data)
 		return;
 
 	data_t *wdata = (data_t*)data;
-	wdata->return_value = Call_Write_Function(wdata->handle, wdata->buffer, wdata->bytes, wdata->nmemb);
+	// 0 bytes handled ends the transfer.
+	wdata->return_value = wdata->handle->destroyed
+		? 0
+		: Call_Write_Function(wdata->handle, wdata->buffer, wdata->bytes, wdata->nmemb);
 	wdata->handle->thread->EventSignal();
 }
 
 static size_t curl_write_function_SM(void *ptr, size_t bytes, size_t nmemb, void *stream)
 {
 	cURLHandle *handle = (cURLHandle *)stream;
+
+	if(handle->destroyed)
+		return 0;
 
 	size_t ret;
 	if(handle->thread == NULL)
@@ -128,7 +134,9 @@ static void sm_read_function_FrameAction(void *data)
 		return;
 
 	data_t *rdata = (data_t*)data;
-	rdata->return_value = Call_Read_Function(rdata->handle, rdata->bytes, rdata->nmemb);
+	rdata->return_value = rdata->handle->destroyed
+		? CURL_READFUNC_ABORT
+		: Call_Read_Function(rdata->handle, rdata->bytes, rdata->nmemb);
 	rdata->handle->thread->EventSignal();
 }
 
@@ -136,6 +144,9 @@ static void sm_read_function_FrameAction(void *data)
 static size_t curl_read_function_SM(char *ptr, size_t bytes, size_t nmemb, void *stream)
 {
 	cURLHandle *handle = (cURLHandle *)stream;
+
+	if(handle->destroyed)
+		return CURL_READFUNC_ABORT;
 
 	size_t ret = 0;
 	if(handle->thread == NULL)
@@ -157,12 +168,22 @@ static size_t curl_read_function_SM(char *ptr, size_t bytes, size_t nmemb, void 
 			return 0;
 	}
 
+	if(ret == CURL_READFUNC_ABORT)
+		return ret;
+
 	if(ret > 0)
 	{
 		memcpy(ptr,handle->send_buffer.data(), handle->send_buffer.size());
 	}
 
 	return ret;
+}
+
+/* Ends the transfer of a handle that was closed while it ran. */
+static int curl_xferinfo_function(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
+{
+	cURLHandle *handle = (cURLHandle *)clientp;
+	return handle->destroyed ? 1 : 0;
 }
 
 static curl_socket_t curl_opensocket_function(void *clientp, curlsocktype purpose, struct curl_sockaddr *address)
@@ -199,6 +220,7 @@ void cURLManager::SDK_OnUnload()
 		while (iter != g_cURLThread_List.end())
 		{
 			pInfo = (*iter);
+			pInfo->Abort();
 			if(pInfo->waiting) {
 				pInfo->event->Signal();
 			}
@@ -278,6 +300,16 @@ void cURLManager::RemoveCloseHelperHandle(ICloseHelper *helper)
 	closehelper_list_mutex->Unlock();
 }
 
+bool cURLManager::TryDeleteCloseHelper(ICloseHelper *helper)
+{
+	// Under the lock that RemoveLinkedICloseHelper() clears _handle with,
+	// since a closed handle is freed by its transfer's thread.
+	closehelper_list_mutex->Lock();
+	bool deletable = helper->TryDelete();
+	closehelper_list_mutex->Unlock();
+	return deletable;
+}
+
 void cURLManager::RemoveLinkedICloseHelper(cURLHandle *handle)
 {
 	closehelper_list_mutex->Lock();
@@ -303,8 +335,23 @@ void cURLManager::RemoveLinkedICloseHelper(cURLHandle *handle)
 
 void cURLManager::RemovecURLHandle(cURLHandle *handle)
 {
-	if(!handle || handle->running)
+	if(!handle)
 		return;
+
+	// A transfer uses the handle: it cannot be freed yet. The transfer is
+	// told to end, and whoever ends it calls this again.
+	{
+		std::lock_guard<std::mutex> lock(handle_state_mutex);
+		if(handle->running)
+		{
+			handle->destroyed = true;
+			if(handle->thread != NULL)
+			{
+				handle->thread->Abort();
+			}
+			return;
+		}
+	}
 	
 	if(handle->thread != NULL)
 	{
@@ -799,6 +846,12 @@ void cURLManager::LoadcURLOption(cURLHandle *handle)
 		if((handle->lasterror = curl_easy_setopt(handle->curl, pInfo4->opt, (curl_off_t)pInfo4->value)) != CURLE_OK)
 			return;
 	}
+
+	// After the plugin's options, so that its CURLOPT_NOPROGRESS cannot
+	// switch this off: it is what ends the transfer of a closed handle.
+	curl_easy_setopt(handle->curl, CURLOPT_XFERINFOFUNCTION, curl_xferinfo_function);
+	curl_easy_setopt(handle->curl, CURLOPT_XFERINFODATA, handle);
+	curl_easy_setopt(handle->curl, CURLOPT_NOPROGRESS, 0L);
 }
 
 CURLFORMcode cURLManager::cURLFormAdd(IPluginContext *pContext, const cell_t *params, WebForm *handle)

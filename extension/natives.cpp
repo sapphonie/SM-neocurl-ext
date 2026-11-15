@@ -200,6 +200,14 @@ static cell_t sm_curl_easy_perform(IPluginContext *pContext, const cell_t *param
 	handle->running = true;
 	CURLcode code = curl_easy_perform(handle->curl);
 	handle->running = false;
+
+	// A callback of the transfer closed the handle.
+	if(handle->destroyed)
+	{
+		g_cURLManager.RemovecURLHandle(handle);
+		return code;
+	}
+
 	curl_easy_getinfo(handle->curl, CURLINFO_LASTSOCKET, &handle->sockextr);
 
 	return code;
@@ -359,16 +367,13 @@ static cell_t sm_curl_send_recv_Signal(IPluginContext *pContext, const cell_t *p
 		return 0;
 
 	cURLThread *thread = handle->thread;
-	if(thread->GetRunType() != cURLThread_Type_SEND_RECV ||
-		!handle->running || !thread->IsWaiting()) // is send & recv thread, running, is waiting 
+	if(thread->GetRunType() != cURLThread_Type_SEND_RECV || !handle->running) // is send & recv thread, running
 	{
 		return 0;
 	}
 
-	thread->SetSenRecvAction((SendRecv_Act)params[2]);
-	thread->EventSignal();
-
-	return 1;
+	// 0 when it is not waiting
+	return thread->SignalAction((SendRecv_Act)params[2]) ? 1 : 0;
 }
 
 
