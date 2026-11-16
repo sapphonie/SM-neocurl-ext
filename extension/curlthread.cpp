@@ -387,6 +387,7 @@ void cURLThread::OnTerminate(IThreadHandle *pHandle, bool cancel)
 	{
 		std::lock_guard<std::mutex> lock(g_cURLManager.handle_state_mutex);
 		handle->running = false;
+		handle->finished = true;
 		destroyed = handle->destroyed;
 	}
 

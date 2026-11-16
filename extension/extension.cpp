@@ -134,7 +134,9 @@ bool cURL_SM::IsShutdown()
 
 bool ICloseHelper::TryDelete()
 {
-	if(_handle == NULL || !_handle->running)
+	// The transfer it was given to holds a pointer to it until it has
+	// ended: before it starts as well as while it runs.
+	if(_handle == NULL || (_handle->finished && !_handle->running))
 	{
 		return true;
 	} else {

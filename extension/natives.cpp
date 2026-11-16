@@ -200,6 +200,7 @@ static cell_t sm_curl_easy_perform(IPluginContext *pContext, const cell_t *param
 	handle->running = true;
 	CURLcode code = curl_easy_perform(handle->curl);
 	handle->running = false;
+	handle->finished = true;
 
 	// A callback of the transfer closed the handle.
 	if(handle->destroyed)

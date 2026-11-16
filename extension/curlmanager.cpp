@@ -316,18 +316,26 @@ void cURLManager::RemoveLinkedICloseHelper(cURLHandle *handle)
 
 	SourceHook::List<ICloseHelper *>::iterator iter;
 	ICloseHelper *pInfo;
-	for (iter=g_CloseHelper_List.begin(); iter!=g_CloseHelper_List.end(); iter++)
+	iter = g_CloseHelper_List.begin();
+	while (iter != g_CloseHelper_List.end())
 	{
 		pInfo = (*iter);
-		if(pInfo->_handle == handle)
+		if(pInfo->_handle != handle)
 		{
-			pInfo->_handle = NULL;
-			if(pInfo->_marked_delete)
-			{
-				pInfo->Delete();
-				iter = g_CloseHelper_List.erase(iter);
-			}
+			iter++;
+			continue;
 		}
+
+		pInfo->_handle = NULL;
+		if(!pInfo->_marked_delete)
+		{
+			iter++;
+			continue;
+		}
+
+		// erase() gives the next element: no step after it.
+		pInfo->Delete();
+		iter = g_CloseHelper_List.erase(iter);
 	}
 
 	closehelper_list_mutex->Unlock();
