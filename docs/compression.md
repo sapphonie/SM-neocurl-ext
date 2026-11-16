@@ -101,6 +101,7 @@ compressed data are an error (`CompressError_Data`).
 
 ## Files
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 void Compression.CompressFile(CompressFormat format, const char[] inFile, const char[] outFile,
                               CompressFileCallback callback, any data = 0, int level = -1,
@@ -113,6 +114,7 @@ void Compression.DecompressFile(CompressFormat format, const char[] inFile, cons
 
 The callback:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 public void OnFileDone(CompressError error, const char[] inFile, const char[] outFile, any data)
 ```
@@ -188,6 +190,7 @@ public void OnDemoDecompressed(CompressError error, const char[] inFile, const c
 The same for data that is not in a file. The input is a string or a [`CurlBuffer`](buffer.md); the output is always a
 `CurlBuffer`, because it may be larger than a plugin's memory.
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 void Compression.CompressString(CompressFormat format, const char[] input, int length,
                                 CompressBufferCallback callback, any data = 0, int level = -1)
@@ -201,6 +204,7 @@ void Compression.DecompressBuffer(CompressFormat format, CurlBuffer buffer,
 
 The callback:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 public void OnDataDone(CompressError error, CurlBuffer output, any data)
 ```
@@ -293,6 +297,7 @@ A job that fails reports one of these values of `CompressError` to its callback:
 
 For a log message, `ErrorString` turns a value into its name:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 int Compression.ErrorString(CompressError error, char[] buffer, int maxlength)
 ```

@@ -7,3 +7,7 @@ extension/CppProperties.json
 # vcpkg checkout and the dependencies build-deps.sh builds
 vcpkg/
 deps/
+
+# Python caches of the tests
+__pycache__/
+.pytest_cache/

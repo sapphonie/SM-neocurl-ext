@@ -102,6 +102,7 @@ A digest is a row of bytes. The encoding, a value of the enum `HashEncoding`, de
 
 ## Texts and small data: at once
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 int Crypt.HashString(Openssl_Hash algorithm, const char[] input, int length, char[] output, int maxlength,
                      HashEncoding encoding = HashEncoding_Hex)
@@ -170,6 +171,7 @@ SHA-256 raw:    32 bytes, the first is 0xba
 
 ## Files and buffers: in the background
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 void Crypt.HashFile(Openssl_Hash algorithm, const char[] file, CryptCallback callback, any data = 0,
                     HashEncoding encoding = HashEncoding_Hex)
@@ -180,6 +182,7 @@ void Crypt.HashBuffer(Openssl_Hash algorithm, CurlBuffer buffer, CryptCallback c
 Both start a job and return immediately. Two threads of the extension work through the jobs of all plugins, and
 each job's callback is called on the main thread in a later game frame:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 public void OnDigest(CryptError error, CurlBuffer digest, any data)
 ```
@@ -260,6 +263,7 @@ An HMAC is a digest that also depends on a secret key. Only someone who knows th
 where a message comes from and that it was not changed. Every method has an HMAC variant with two more arguments,
 the key and its length:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 int Crypt.HmacString(Openssl_Hash algorithm, const char[] key, int keyLength, const char[] input, int length,
                      char[] output, int maxlength, HashEncoding encoding = HashEncoding_Hex)

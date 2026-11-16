@@ -184,6 +184,7 @@ about that event.
 
 Their signatures:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 public void OnOpen(WebSocket ws, any data)
 public void OnMessage(WebSocket ws, WebSocketMessageType type, CurlBuffer message, any data)
@@ -316,6 +317,7 @@ the maximum message size, and it is held in memory as a whole.
 With `SetFrameMode(true)` the extension passes on every piece as it arrives instead. `OnMessage` is never called;
 `OnFrame` is called for each piece:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 public void OnFrame(WebSocket ws, int flags, CurlBuffer payload, int offset, int bytesLeft, any data)
 ```
@@ -419,6 +421,7 @@ With `SetReconnect(true)` a connection that ends through an error is opened agai
 connection could not be established, it broke, or a keepalive or idle timeout hit. There is no reconnect when the
 plugin or the server closes the connection, or when a message exceeded the maximum message size.
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 void WebSocket.SetReconnect(bool enable, float initialDelay = 1.0, float maxDelay = 60.0, int maxAttempts = 0)
 ```
@@ -470,6 +473,7 @@ Relay: connected
 
 ## Closing
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 void WebSocket.Close(int code = 1000, const char[] reason = "")
 ```

@@ -217,6 +217,7 @@ Every transfer gets two settings from the extension:
 
 ### In the background: PerformThread
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 void CurlEasy.PerformThread(CURL_OnComplete callback, any value = 0)
 ```
@@ -224,6 +225,7 @@ void CurlEasy.PerformThread(CURL_OnComplete callback, any value = 0)
 `PerformThread` starts the transfer on a thread of the extension and returns immediately. When the transfer is
 complete, successfully or not, `callback` is called once, in a game frame:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 public void OnComplete(CurlEasy easy, CURLcode code, any value)
 ```
@@ -258,6 +260,7 @@ This is the way to run transfers while people play.
 
 ### Blocking: LoadOpt and Perform
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 CURLcode CurlEasy.LoadOpt()
 CURLcode CurlEasy.Perform()
@@ -404,6 +407,7 @@ Content-Length: 6
 Set a write callback with `SetOptFunction(CURLOPT_WRITEFUNCTION, callback, value)`. libcurl calls it for every piece
 of the body as it arrives:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 public int OnData(CurlEasy easy, const char[] buffer, const int bytes, const int nmemb, any value)
 ```
@@ -492,6 +496,7 @@ the [first request](#a-first-request).
 
 To send a simple web form, build the text and URL-encode the values with `Escape`:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 bool CurlEasy.Escape(const char[] text, char[] buffer, int maxlen)
 int CurlEasy.Unescape(const char[] text, char[] buffer, int maxlen)
@@ -548,6 +553,7 @@ easy.PerformThread(OnPutDone, file);
 When the data to upload is neither a string nor a file, a read callback supplies it piece by piece. Set it with
 `SetOptFunction(CURLOPT_READFUNCTION, callback, value)`:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 public int OnUploadData(CurlEasy easy, const int bytes, const int nmemb, any value)
 ```
@@ -555,6 +561,7 @@ public int OnUploadData(CurlEasy easy, const int bytes, const int nmemb, any val
 libcurl calls it whenever it can send more. `bytes * nmemb` is the most it takes now. The callback hands over the next
 piece with `easy.SetSendBuffer(data, size)` and returns the number of bytes in it. Returning 0 means: that was all.
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 void CurlEasy.SetSendBuffer(const char[] data, int size = -1)
 ```
@@ -626,6 +633,7 @@ PrintToServer("Status %d from %s after %.3f seconds", easy.ResponseCode, finalUr
 libcurl knows more about a transfer than these four. Everything is read with the two generic methods and an info
 named `CURLINFO_...`:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 CURLcode CurlEasy.GetInfoString(CURLINFO info, char[] buffer, int maxlen)
 CURLcode CurlEasy.GetInfoInt(CURLINFO info, any &value)
@@ -679,6 +687,7 @@ if (code != CURLE_OK) {
 
 ### Getting a readable error message
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 void CurlEasy.GetError(CURLcode code, char[] buffer, int maxlen)
 ```
@@ -798,6 +807,7 @@ The server receives a request with five sections: `key`, `name`, `red` and `blu`
 The methods cover the usual sections. For the rare other cases, the native `curl_formadd` takes a free list of
 `CURLFORM_` options and works on the same handle:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 curl_formadd(form, CURLFORM_COPYNAME, "note", CURLFORM_COPYCONTENTS, "hello", CURLFORM_CONTENTTYPE, "text/plain",
              CURLFORM_END);
@@ -811,6 +821,7 @@ It accepts `CURLFORM_COPYNAME`, `CURLFORM_NAMELENGTH`, `CURLFORM_COPYCONTENTS`, 
 
 A `CurlFile` is an open file for a transfer to write to or read from.
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 new CurlFile(const char[] file, const char[] mode)
 ```
@@ -870,6 +881,7 @@ The address is `host:port` for a TCP connection. With `udp://` in front, `udp://
 
 On the connected handle, `SendRecv` starts a thread that sends and receives for the plugin:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 void CurlEasy.SendRecv(CURL_OnSend onSend, CURL_OnReceive onReceive, CURL_OnComplete onComplete, SendRecv_Act act,
                        int sendTimeout, int recvTimeout, int recvBufferSize = 1024, any value = 0)
@@ -906,6 +918,7 @@ easy.SendRecv(OnSent, OnReceived, OnEnded, SendRecv_Act_GOTO_SEND, IO_TIMEOUT, I
 
 The callbacks:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 public SendRecv_Act OnSent(CurlEasy easy, CURLcode code, const int sentBytes, any value)
 public SendRecv_Act OnReceived(CurlEasy easy, CURLcode code, const char[] data, const int size, any value)
@@ -972,6 +985,7 @@ Received 12 bytes: echo: HELLO
 A connection that only talks when the plugin has something to say starts with `SendRecv_Act_GOTO_WAIT`. When there
 is something to send, the plugin sets the send buffer and wakes the thread:
 
+<!-- not-an-excerpt -->
 ```sourcepawn
 easy.SetSendBuffer("status\n");
 easy.Signal(SendRecv_Act_GOTO_SEND);

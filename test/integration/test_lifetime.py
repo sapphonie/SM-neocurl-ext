@@ -1,0 +1,101 @@
+# Copyright 2026 davenonymous
+"""Closes curl handles at awkward moments, with test/integration/plugins/curl_lifetime_test.sp.
+
+Each of these cases once crashed the server or went wrong silently. They run last: a crash here must not take the
+other tests with it.
+"""
+
+import re
+import time
+
+import pytest
+
+import services
+from helpers import wait_until
+
+PLUGIN = "curl_lifetime_test"
+# A closed handle's transfer ends through libcurl's progress callback, which runs about once a second.
+ABORT_SECONDS = 10
+
+
+@pytest.fixture
+def lifetime(server, console):
+    """The console, and afterwards the checks every case shares: no callback of a closed handle, a living server."""
+    yield console
+
+    time.sleep(1)
+    assert "UNEXPECTED" not in server.new_log()
+    assert server.is_running(), "The server stopped"
+    assert "hostname" in server.rcon("status")
+
+
+def reload_plugin(server):
+    server.rcon("sm plugins load " + PLUGIN)
+    server.wait_until_loaded(PLUGIN + ".smx")
+
+
+def test_header_file_together_with_a_write_callback(server, lifetime, http):
+    lifetime('lt_header_and_callback "%s/index.html"' % http.url)
+    log = server.wait_for_log("[lifetime] header_and_callback:")
+
+    assert "code 0, body 6 bytes" in log
+    assert b"HTTP/1.1 200 OK" in server.read_file("addons/sourcemod/data/lifetime_headers.txt")
+
+
+def test_list_and_file_closed_before_the_transfer(server, lifetime, http):
+    lifetime('lt_early_delete "%s/big.txt"' % http.url)
+    server.wait_for_log("[lifetime] early_delete: code 0, status 200, file %d bytes" % len(services.BIG_TEXT))
+
+    assert http.requests_to("/big.txt")[-1].headers["x-early"] == "deleted"
+    assert server.read_file("addons/sourcemod/data/lifetime_early.txt") == services.BIG_TEXT
+
+
+def test_value_of_send_and_receive_reaches_every_callback(server, lifetime, sockets):
+    lifetime('lt_sendrecv_value "%s"' % sockets.address)
+    server.wait_for_log("[lifetime] sendrecv_value: send 222, complete 222")
+
+
+def test_handle_deleted_in_its_write_callback(server, lifetime, http):
+    lifetime('lt_delete_in_write "%s/big.txt" 0' % http.url)
+    server.wait_for_log("[lifetime] delete_in_write: deleted in the callback")
+
+
+def test_handle_deleted_in_the_write_callback_of_a_blocking_transfer(server, lifetime, http):
+    lifetime('lt_delete_in_write "%s/big.txt" 1' % http.url)
+    log = server.wait_for_log("[lifetime] delete_in_write: blocking transfer returned ")
+
+    # The transfer is ended by whichever notices the closed handle first: the write function, which takes no more
+    # data (CURLE_WRITE_ERROR, 23), or the progress function (CURLE_ABORTED_BY_CALLBACK, 42).
+    code = int(re.search(r"blocking transfer returned (\d+)", log).group(1))
+    assert code in (23, 42)
+
+
+def test_handle_deleted_during_its_transfer(server, lifetime, http):
+    before = len(http.slow_requests)
+    lifetime('lt_slow_request "%s/slow"' % http.url)
+    server.wait_for_log("[lifetime] slow_request: started")
+    lifetime("lt_delete_kept")
+
+    wait_until(lambda: len(http.slow_requests) > before, "the transfer to end", ABORT_SECONDS)
+    assert http.slow_requests[-1] is not None
+
+
+def test_plugin_unloaded_during_a_transfer(server, lifetime, http):
+    before = len(http.slow_requests)
+    lifetime('lt_slow_request "%s/slow"' % http.url)
+    server.wait_for_log("[lifetime] slow_request: started")
+    lifetime("sm plugins unload " + PLUGIN)
+
+    wait_until(lambda: len(http.slow_requests) > before, "the transfer to end", ABORT_SECONDS)
+    assert http.slow_requests[-1] is not None
+    reload_plugin(server)
+
+
+def test_plugin_unloaded_while_send_and_receive_waits(server, lifetime, sockets):
+    before = len(sockets.silent_clients)
+    lifetime('lt_idle_wait "%s"' % sockets.address)
+    server.wait_for_log("[lifetime] idle_wait: waiting")
+    lifetime("sm plugins unload " + PLUGIN)
+
+    wait_until(lambda: len(sockets.silent_clients) > before, "the connection to close", ABORT_SECONDS)
+    reload_plugin(server)

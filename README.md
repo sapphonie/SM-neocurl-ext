@@ -267,7 +267,7 @@ Details:
 
 ## Testing
 
-There are three kinds of tests.
+There are four kinds of tests. CI runs all of them.
 
 **Unit tests** cover the code that does not need a game server: the compression formats, digests, encodings, path
 rules and the job queue. They are built with the extension, as
@@ -290,8 +290,32 @@ because `//` starts a comment on the server console:
 | `curl_ext_test_http_url` | A URL that answers a GET request with status 200. |
 | `curl_ext_test_ws_url` | A WebSocket server that sends every message back (an echo server). |
 
-**The example plugins** in `pawn/scripting/examples/` double as tests of the documentation: the longer code in the
-guides is copied from them.
+**The server tests** in [`test/integration/`](test/integration/) run all of this on a real game server. They start a
+TF2 server with SourceMod in a Docker container, put the built extension into it, compile and load the API test
+plugin, every example plugin and a plugin that closes handles at awkward moments, and check what the server prints
+and what local stand-ins for the web services receive. They need Docker and Python 3.12 or newer:
+
+```
+pip install --require-hashes -r test/integration/requirements.txt
+pytest test/integration
+```
+
+The first run downloads the server image, about 5 GB. A run takes a few minutes, most of it the server's start.
+Useful options:
+
+| Option | Meaning |
+|---|---|
+| `--package <dir>` | The directory with the `addons/` tree to test. The default is `build/package`. |
+| `--image <image>` | The server image. The default is `ghcr.io/melkortf/tf2-sourcemod/i386:latest`, a 32-bit server. |
+| `--server-log <file>` | Writes the server's console output to a file at the end. |
+| `--keep-server` | Leaves the server container `sm-neocurl-integration` running, to look around after a failure. |
+
+The tests use the host's network and the game port 27015, so no other game server can run on the machine at the same
+time. Only the 32-bit binary is tested this way: there is no public 64-bit server image with SourceMod.
+
+**The guide check**, `python3 test/docs/check_excerpts.py`, makes sure that the code blocks in this README and in
+`docs/` are still excerpts of the example plugins, which the server tests have run. A block that is not meant to be
+one, such as the signature of a method, has the line `<!-- not-an-excerpt -->` before it.
 
 `pawn/scripting/curl_self_test.sp` is the test plugin of the original cURL extension. It is kept for reference and
 is not maintained.
@@ -307,6 +331,8 @@ is not maintained.
 | `pawn/scripting/include/` | The include files for plugins. |
 | `pawn/scripting/examples/` | The example plugins. |
 | `pawn/scripting/` | The two test plugins. |
+| `test/integration/` | The server tests: the pytest files, the stand-in services and the server control. |
+| `test/docs/` | The check of the guides against the example plugins. |
 | `docs/` | The guides. |
 | `AMBuildScript`, `AMBuilder`, `PackageScript`, `configure.py` | The build. `PackageScript` decides what goes into the release archive. |
 | `build-deps.sh`, `vcpkg.json`, `triplets/` | The build of the libraries. |
@@ -316,12 +342,14 @@ is not maintained.
 
 Every push and pull request is built for Linux and Windows by GitHub Actions (`.github/workflows/ci.yml`). The
 workflow runs the unit tests for both architectures, checks that the Linux binaries need no newer glibc than 2.34,
-and offers the two archives as build artifacts.
+offers the two archives as build artifacts, and then runs the server tests with the 32-bit binary of the Linux
+archive and the guide check. It also runs once a week, because the server tests use the newest server image and a
+game update can break them.
 
 To publish a release:
 
 1. Set the new version in `extension/sdk/smsdk_config.h` (`SMEXT_CONF_VERSION`) and in `vcpkg.json` (`version`).
 2. Commit, and push a tag that is the letter `v` followed by exactly that version, for example `v2.1.0`.
 
-The workflow then creates a GitHub release with both archives. A tag that does not match `SMEXT_CONF_VERSION` is
-built but not released.
+The workflow then creates a GitHub release with both archives, provided the server tests passed. A tag that does
+not match `SMEXT_CONF_VERSION` is built but not released.
