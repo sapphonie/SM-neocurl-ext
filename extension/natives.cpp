@@ -348,6 +348,7 @@ static cell_t sm_curl_easy_send_recv(IPluginContext *pContext, const cell_t *par
 	handle->send_timeout = params[6];
 	handle->recv_timeout = params[7];
 	handle->UserData[UserData_Type_Send_Recv] = params[9];
+	handle->UserData[UserData_Type_Complete] = params[9];
 	handle->callback_Function[cURL_CallBack_SEND] = pFunction_send;
 	handle->callback_Function[cURL_CallBack_RECV] = pFunction_recv;
 	handle->callback_Function[cURL_CallBack_COMPLETE] = pFunction_complete;
