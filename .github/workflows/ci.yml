@@ -1,7 +1,12 @@
 # Builds the extension for Linux and Windows (x86 and x86_64) on every push, pull request and manual run, with its
 # dependencies built statically by vcpkg (build-deps.sh), and packs each platform into an archive that is laid out
-# like a game folder. For a pushed v* tag it also publishes these archives as a GitHub release, after checking that
-# the tag matches the version the extension reports.
+# like a game folder. The 32-bit Linux binary of that archive is then tested on a real TF2 server in a container
+# (test/integration/), and the guides are checked against the example plugins (test/docs/). For a pushed v* tag it
+# also publishes the archives as a GitHub release, after checking that the tag matches the version the extension
+# reports and only when the server tests passed.
+#
+# The server tests use the newest image of the TF2 server, so a game or SourceMod update can break them without a
+# change in this repository. The weekly run tells that between pushes.
 
 name: CI
 
@@ -9,12 +14,27 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Mondays at 04:17 UTC.
+    - cron: '17 4 * * 1'
+
+# A newer push to the same branch or pull request makes the older run pointless. Runs of tags are never cancelled:
+# one of them may be publishing a release.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
 
 env:
   SOURCEMOD_BRANCH: 1.12-dev
   METAMOD_BRANCH: 1.12-dev
   # The binaries may require at most this glibc version.
   MAX_GLIBC: '2.34'
+  # The TF2 server with SourceMod that the server tests run on. It is 32-bit; there is no public 64-bit image with
+  # SourceMod, so the 64-bit binary is built but not run.
+  TF2_SERVER_IMAGE: ghcr.io/melkortf/tf2-sourcemod/i386:latest
 
 jobs:
   build:
@@ -153,10 +173,73 @@ jobs:
           path: ${{ steps.pack.outputs.archive }}
           if-no-files-found: error
 
+  docs:
+    name: Guides match the examples
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check that the code in the guides is taken from the example plugins
+        run: python3 test/docs/check_excerpts.py
+
+  integration:
+    name: Server tests (linux, 32-bit)
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download the Linux archive
+        uses: actions/download-artifact@v4
+        with:
+          name: sm-neocurl-linux
+          path: archive
+
+      - name: Extract the archive
+        run: |
+          mkdir package
+          tar -xzf archive/*.tar.gz -C package
+          find package -type f | sort
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: test/integration/requirements.txt
+
+      - name: Install the test requirements
+        run: pip install --require-hashes -r test/integration/requirements.txt
+
+      - name: Pull the server image
+        run: |
+          docker pull "$TF2_SERVER_IMAGE"
+          docker image inspect "$TF2_SERVER_IMAGE" --format 'Testing on {{index .RepoDigests 0}}, created {{.Created}}'
+
+      - name: Run the tests on the server
+        run: |
+          pytest test/integration --package package --server-log server.log --junitxml junit.xml
+
+      - name: Upload the server log and the test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-tests
+          path: |
+            server.log
+            junit.xml
+          if-no-files-found: ignore
+
   release:
     name: Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, integration]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
