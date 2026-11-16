@@ -112,8 +112,8 @@ native void crypt_hmac_buffer(Openssl_Hash algorithm, const char[] key, int keyL
 
 /**
  * Computes the digest of a file in the background. The path is relative to
- * the game directory and must not leave it ("..", absolute paths and
- * "file://" are refused).
+ * the game directory and must not leave it: absolute paths, "file://", an
+ * empty path and empty, "." or ".." parts are refused, on Windows also ":".
  *
  * @param algorithm     The algorithm.
  * @param file          The file.

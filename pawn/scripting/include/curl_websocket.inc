@@ -18,15 +18,17 @@
  *   pings) reach OnPong.
  * - Sends are queued and sent by the connection's thread; a send that would
  *   exceed the send queue's maximum fails. Messages queued while connecting
- *   are sent once open; unsent ones are dropped when a connection is lost.
+ *   are sent once open; unsent ones are dropped when a connection is lost
+ *   and when the plugin closes the WebSocket.
  * - When the received but undelivered data reaches the maximum message size,
  *   the thread stops reading until the plugin got it, which slows the peer.
  * - With reconnecting on, a connection lost through an error (not a closing
  *   handshake) is opened again after a delay that doubles with every failed
  *   attempt. OnReconnect is called for every scheduled attempt and may give
  *   up; OnClose is called only when the WebSocket is closed for good.
- * - Closing the handle (delete) ends the connection with close code 1001,
- *   and no callback is called anymore. So does unloading the plugin.
+ * - Closing the handle (delete) ends the connection, with close code 1001
+ *   when it is open, and no callback is called anymore. So does unloading
+ *   the plugin.
  *
  * One handle is one WebSocket: after OnClose, create a new one to connect
  * again. All options and callbacks must be set before Connect().
@@ -121,12 +123,14 @@ typedef WebSocketReconnectCallback = function Action (WebSocket ws, CURLcode err
  * Called once when the WebSocket closed for good.
  *
  * @param ws            The WebSocket.
- * @param error         CURLE_OK after a closing handshake (from either
- *                      side), otherwise the error that ended it.
+ * @param error         CURLE_OK when the peer closed, the plugin called
+ *                      websocket_close() or a message exceeded the maximum
+ *                      size; otherwise the error that ended it.
  * @param code          The close code: the peer's, the plugin's, 1009 when
  *                      a message exceeded the maximum size, 1005 for a close
  *                      frame without one, 1006 without a close frame.
- * @param reason        The close reason.
+ * @param reason        The close reason: the peer's, the plugin's, "message
+ *                      too big" for 1009, empty after an error.
  * @param data          The data passed to Connect().
  */
 typedef WebSocketCloseCallback = function void (WebSocket ws, CURLcode error, int code, const char[] reason,
@@ -275,9 +279,10 @@ native void websocket_connect(Handle ws, any data = 0);
 /**
  * Queues a text message.
  *
- * @return              False when the send queue is full or the WebSocket
- *                      is closing or closed.
- * @error               Not connected yet.
+ * @return              True when the message was queued. False when it
+ *                      does not fit into the send queue, after
+ *                      websocket_close(), or when the WebSocket is closed.
+ * @error               websocket_connect() was not called yet.
  */
 native bool websocket_send_text(Handle ws, const char[] text);
 
@@ -285,7 +290,8 @@ native bool websocket_send_text(Handle ws, const char[] text);
  * Queues a binary message of length bytes.
  *
  * @return              As for websocket_send_text.
- * @error               Not connected yet, or a negative length.
+ * @error               websocket_connect() was not called yet, or a negative
+ *                      length.
  */
 native bool websocket_send_binary(Handle ws, const char[] data, int length);
 
@@ -294,7 +300,8 @@ native bool websocket_send_binary(Handle ws, const char[] data, int length);
  *
  * @param binary        Binary (default) or text.
  * @return              As for websocket_send_text.
- * @error               Not connected yet, or an invalid buffer.
+ * @error               websocket_connect() was not called yet, or an invalid
+ *                      buffer.
  */
 native bool websocket_send_buffer(Handle ws, Handle buffer, bool binary = true);
 
@@ -303,19 +310,22 @@ native bool websocket_send_buffer(Handle ws, Handle buffer, bool binary = true);
  *
  * @param payload       At most 125 bytes.
  * @param length        How many bytes of payload, or -1 for up to its NUL.
- * @return              False when the WebSocket is closing or closed.
- * @error               Not connected yet, or a payload over 125 bytes.
+ * @return              False after websocket_close() or when the WebSocket
+ *                      is closed.
+ * @error               websocket_connect() was not called yet, or a payload
+ *                      over 125 bytes.
  */
 native bool websocket_ping(Handle ws, const char[] payload = "", int length = -1);
 
 /**
  * Starts the closing handshake (or ends a pending reconnect); OnClose
- * follows. Never reconnects.
+ * follows with this code and reason. Never reconnects. Messages still in
+ * the send queue are not sent.
  *
  * @param code          1000-1003, 1007-1014 or 3000-4999.
  * @param reason        At most 123 bytes.
- * @error               Not connected yet, an invalid code or a reason over
- *                      123 bytes.
+ * @error               websocket_connect() was not called yet, an invalid
+ *                      code or a reason over 123 bytes.
  */
 native void websocket_close(Handle ws, int code = 1000, const char[] reason = "");
 

@@ -1,123 +1,327 @@
 # SM-neocurl
 
-A SourceMod extension that gives plugins libcurl (`cURL.inc`), a WebSocket client, compression and decompression
-(gzip, zlib, deflate, brotli, zstd) and digests and HMACs. It is built for Linux and Windows, x86 and x86_64, with every
-library linked in statically.
+SM-neocurl is a [SourceMod](https://www.sourcemod.net/) extension that lets plugins talk to the network and work
+with data: HTTP requests and file transfers with [libcurl](https://curl.se/libcurl/), WebSocket connections,
+compression, and digests and HMACs. Transfers, connections and jobs run on threads of the extension, so the game
+server keeps its tick rate.
+
+It is built for Linux and Windows, for 32-bit and 64-bit servers. All libraries it needs are part of the extension
+file; nothing else has to be installed.
+
+- [What plugins get](#what-plugins-get)
+- [Installing](#installing)
+- [Configuration](#configuration)
+- [TLS certificates](#tls-certificates)
+- [Writing a plugin](#writing-a-plugin)
+- [Example plugins](#example-plugins)
+- [Building](#building)
+- [Testing](#testing)
+- [Source layout](#source-layout)
+- [Releases](#releases)
+
+## What plugins get
+
+| Feature | Methodmaps | Guide |
+|---|---|---|
+| HTTP requests, downloads, uploads, web forms, raw TCP and UDP connections | `CurlEasy`, `CurlSlist`, `CurlForm`, `CurlFile` | [HTTP and other transfers](docs/modern.md) |
+| WebSocket connections (`ws://` and `wss://`) with keepalive and automatic reconnecting | `WebSocket` | [WebSocket](docs/websocket.md) |
+| gzip, zlib, deflate, brotli and zstd, for files and for data in memory | `Compression` | [Compression](docs/compression.md) |
+| MD5, SHA-1, SHA-2, SHA-3, BLAKE2, SM3, Keccak-256, CRC-32 and Adler-32 digests, and HMACs | `Crypt` | [Crypt](docs/crypt.md) |
+| Byte buffers for data larger than a plugin's memory | `CurlBuffer` | [CurlBuffer](docs/buffer.md) |
+
+Each guide explains its feature step by step, with examples taken from plugins that were run on a test server, and
+ends with a complete reference and a list of common mistakes.
+
+Every feature is available in two forms: as natives (`curl_easy_init`, `websocket_connect`,
+`compression_compress_file`, ...) and as methodmaps that wrap them. The guides use the methodmaps and list the
+native behind each method. Plugins written for the original cURL extension with the `curl_easy_*` natives keep
+working.
+
+### What libcurl can do in this build
+
+The extension links libcurl 8.23.0 with OpenSSL (version 2.1.0 of the extension, Linux build). It supports these
+protocols:
+
+```
+dict file ftp ftps gopher gophers http https imap imaps mqtt mqtts pop3 pop3s rtsp scp sftp smtp smtps telnet tftp ws wss
+```
+
+- HTTP/1.1 and HTTP/2. There is no HTTP/3.
+- Answers compressed with gzip, deflate, brotli or zstd are unpacked automatically.
+- SFTP and SCP through libssh2.
+- There is no LDAP support, and no support for international domain names (host names with non-ASCII characters).
+
+A plugin can ask the running extension the same question; see
+[Information about libcurl](docs/modern.md#information-about-libcurl).
 
 ## Installing
 
-Download the archive for your platform from the
-[releases](https://github.com/sapphonie/SM-neocurl-ext/releases) and extract it into the game folder (e.g. `tf/`):
+Requirements:
+
+- SourceMod 1.12.
+- On Linux: glibc 2.34 or newer (for example Debian 12 or Ubuntu 22.04).
+
+Steps:
+
+1. Download the archive for the server's operating system from the
+   [releases](https://github.com/sapphonie/SM-neocurl-ext/releases): `sm-neocurl-v<version>-linux.tar.gz` or
+   `sm-neocurl-v<version>-windows.zip`, for example `sm-neocurl-v2.1.0-linux.tar.gz`. Each archive has the files for
+   32-bit and for 64-bit servers.
+2. Extract it into the game directory, the one that contains `addons/` (`tf/` for Team Fortress 2).
+3. Restart the server.
+
+The archive contains:
 
 ```
-addons/sourcemod/extensions/curl.ext.so|dll        32-bit servers
-addons/sourcemod/extensions/x64/curl.ext.so|dll    64-bit servers
-addons/sourcemod/scripting/include/cURL.inc        for compiling plugins
+addons/sourcemod/extensions/curl.ext.so          the extension for 32-bit servers (curl.ext.dll on Windows)
+addons/sourcemod/extensions/x64/curl.ext.so      the extension for 64-bit servers (curl.ext.dll on Windows)
+addons/sourcemod/scripting/include/cURL.inc      the include files, needed only to compile plugins
 addons/sourcemod/scripting/include/cURL_header.inc
 addons/sourcemod/scripting/include/curl_buffer.inc
 addons/sourcemod/scripting/include/curl_compression.inc
 addons/sourcemod/scripting/include/curl_crypt.inc
 addons/sourcemod/scripting/include/curl_modern.inc
 addons/sourcemod/scripting/include/curl_websocket.inc
-addons/sourcemod/licenses/sm-neocurl/              licenses of the linked libraries
+addons/sourcemod/licenses/sm-neocurl/            the licenses of the libraries inside the extension
 ```
 
-The Linux binaries need glibc 2.34 or newer (Debian 12, Ubuntu 22.04).
+The extension has no plugin, no commands and no configuration file of its own. SourceMod loads it when a plugin that
+uses it is loaded. To check that it is installed, type `sm exts list` on the server console; while a plugin uses it,
+the list has a line like this:
 
-## Features
+```
+[10] NEO cURL Extension (2.1.0): NEO cURL Extension
+```
 
-curl with OpenSSL, HTTP/2 (nghttp2), WebSockets, SFTP and SCP (libssh2), brotli, zstd and gzip (zlib) content
-encoding, and the public suffix list for cookies (libpsl). There is no HTTP/3, SASL or LDAP support.
+## Configuration
 
-On Linux curl uses Debian's CA bundle `/etc/ssl/certs/ca-certificates.crt` and `/etc/ssl/certs`, with OpenSSL's
-default store as fallback. On Windows it uses the Windows certificate store. Plugins can set their own with
-`CURLOPT_CAINFO` and `CURLOPT_CAPATH`.
+There is one setting, and most servers do not need it: the largest size a [`CurlBuffer`](docs/buffer.md) may have. It
+is 268435456 bytes (256 MB) by default. To change it, add a line to SourceMod's
+`addons/sourcemod/configs/core.cfg`, inside the `"Core"` section, and restart the server:
 
-## Plugin API
+```
+"CurlBufferMaxBytes"	"67108864"
+```
 
-`#include <cURL>` gives plugins all of it. Besides libcurl's easy interface (`curl_easy_*` natives), it has:
+See [The size limit](docs/buffer.md#the-size-limit) for what the limit applies to.
 
-- [CurlEasy, CurlSlist, CurlForm, CurlFile](docs/modern.md) (`curl_modern.inc`): methodmaps over the libcurl
-  natives, with shortcuts for the common options and results and the text of a failed transfer for logs.
-- [CurlBuffer](docs/buffer.md) (`curl_buffer.inc`): a byte buffer in the extension, for data larger than a plugin's
-  own memory. Its size limit is `CurlBufferMaxBytes` in SourceMod's `core.cfg` (default 256 MB).
-- [WebSocket](docs/websocket.md) (`curl_websocket.inc`): `ws://` and `wss://` connections, one thread each, with
-  whole messages or raw frames, keepalive, reconnecting with backoff and backpressure.
-- [Compression](docs/compression.md) (`curl_compression.inc`): gzip, zlib, raw deflate, brotli and zstd, of files and
-  data, on two background threads.
-- [Crypt](docs/crypt.md) (`curl_crypt.inc`): MD5, SHA-1, SHA-2, SHA-3, BLAKE2, SM3, Keccak-256, CRC-32 and Adler-32
-  digests and HMACs, as hex, base64 or raw bytes; strings at once, buffers and files on two background threads. It
-  replaces the deprecated `curl_hash_file` and `curl_hash_string`.
+## TLS certificates
 
-Every API has snake_case natives (`websocket_connect`, `compression_compress_file`, ...) and a methodmap that wraps
-them (`WebSocket`, `Compression`, `Crypt`, `CurlBuffer`).
+For `https://` and `wss://` connections the extension checks the server's certificate against the certificate
+authorities the operating system trusts:
+
+- **Linux:** the file `/etc/ssl/certs/ca-certificates.crt` and the directory `/etc/ssl/certs`, where Debian and
+  Ubuntu keep them (package `ca-certificates`).
+- **Windows:** the extension asks libcurl to use the certificate store of Windows.
+
+If connections fail with a certificate error on a Linux server, the `ca-certificates` package is usually missing or
+outdated. A plugin can also name its own certificates: with `CURLOPT_CAINFO` or `CURLOPT_CAPATH` for a
+[`CurlEasy`](docs/modern.md#options-that-name-a-file), and with `SetCaFile` for a
+[`WebSocket`](docs/websocket.md#options).
+
+## Writing a plugin
+
+Copy the include files into the `include` directory of the SourcePawn compiler, and include the main one:
 
 ```sourcepawn
 #include <cURL>
+```
 
-public void OnPluginStart()
+That one line makes everything available. A plugin that includes it needs the extension to run; SourceMod loads the
+extension together with the plugin and refuses to load the plugin when the extension is not installed.
+
+A first plugin can ask the extension what it is, which also proves that everything is in place. From
+[`curl_basics.sp`](pawn/scripting/examples/curl_basics.sp):
+
+```sourcepawn
+public Action Command_Info(int args)
 {
-	char digest[65];
-	Crypt.HashString(Openssl_Hash_SHA3_256, "hello", -1, digest, sizeof(digest));
-	PrintToServer("sha3-256: %s", digest);
+	char text[512];
+	CurlEasy.Version(text, sizeof(text));
+	PrintToServer("Version: %s", text);
+	CurlEasy.Protocols(text, sizeof(text));
+	PrintToServer("Protocols: %s", text);
 
-	Compression.CompressFile(CompressFormat_Zstd, "demos/match.dem", "demos/match.dem.zst", OnCompressed);
-}
-
-public void OnCompressed(CompressError error, const char[] inFile, const char[] outFile, any data)
-{
-	if (error == CompressError_None)
-		DeleteFile(inFile);
+	int features = CurlEasy.Features();
+	PrintToServer("TLS: %s, IPv6: %s, compressed answers: %s",
+	              (features & CURL_VERSION_SSL) ? "yes" : "no",
+	              (features & CURL_VERSION_IPV6) ? "yes" : "no",
+	              (features & CURL_VERSION_LIBZ) ? "yes" : "no");
+	return Plugin_Handled;
 }
 ```
+
+And this is a complete HTTP request, a message posted to a Discord channel, from
+[`curl_discord_webhook.sp`](pawn/scripting/examples/curl_discord_webhook.sp):
+
+```sourcepawn
+CurlSlist headers = new CurlSlist();
+headers.Append("Content-Type: application/json");
+
+CurlEasy easy = new CurlEasy();
+easy.SetUrl(url);
+easy.SetHeaders(headers);
+easy.SetPostFields(body);  // Setting a body makes the request a POST.
+easy.SetTimeout(10);
+
+// The headers are closed when the transfer is complete, so they travel
+// to the callback as its data.
+easy.PerformThread(OnPosted, headers);
+```
+
+```sourcepawn
+public void OnPosted(CurlEasy easy, CURLcode code, CurlSlist headers)
+{
+	if (code != CURLE_OK) {
+		// No answer at all: no network, DNS failure, timeout, TLS error ...
+		char error[256];
+		easy.GetError(code, error, sizeof(error));
+		LogError("Discord webhook: the request failed: %s", error);
+	} else if (easy.ResponseCode != 204) {
+		// Discord answered, but not with "204 No Content", its success
+		// status: 404 for a deleted webhook, 429 when rate limited, ...
+		LogError("Discord webhook: HTTP status %d", easy.ResponseCode);
+	}
+
+	delete easy;
+	delete headers;
+}
+```
+
+[HTTP and other transfers](docs/modern.md) explains every line of it.
+
+## Example plugins
+
+[`pawn/scripting/examples/`](pawn/scripting/examples/) has complete plugins that compile as they are. They are the
+source of the longer code in the guides, and each was run on a test server.
+
+| Plugin | What it does |
+|---|---|
+| [`curl_discord_webhook.sp`](pawn/scripting/examples/curl_discord_webhook.sp) | Posts map changes and messages to a Discord channel through a webhook. |
+| [`curl_map_download.sp`](pawn/scripting/examples/curl_map_download.sp) | Downloads a map from a fast download server into `maps/`. |
+| [`curl_demo_upload.sp`](pawn/scripting/examples/curl_demo_upload.sp) | Uploads a SourceTV demo to demos.tf. |
+| [`curl_etf2l_player.sp`](pawn/scripting/examples/curl_etf2l_player.sp) | Looks up a player in the ETF2L API. |
+| [`curl_basics.sp`](pawn/scripting/examples/curl_basics.sp) | The smaller features: a blocking request, header files, PUT uploads, information about libcurl. |
+| [`curl_tcp_client.sp`](pawn/scripting/examples/curl_tcp_client.sp) | Sends a line to a TCP or UDP service and prints the answer. |
+| [`websocket_relay.sp`](pawn/scripting/examples/websocket_relay.sp) | Relays chat between the game and a backend over a WebSocket that reconnects by itself. |
+| [`websocket_frames.sp`](pawn/scripting/examples/websocket_frames.sp) | Receives a large binary WebSocket message piece by piece. |
+| [`compression_demos.sp`](pawn/scripting/examples/compression_demos.sp) | Compresses SourceTV demos with zstd in the background and unpacks them again. |
+| [`crypt_signed_webhook.sp`](pawn/scripting/examples/crypt_signed_webhook.sp) | Sends requests signed with HMAC-SHA256 to a backend. |
+| [`crypt_verify_file.sp`](pawn/scripting/examples/crypt_verify_file.sp) | Checks a file against a published SHA-256; digests of texts, files and buffers. |
+| [`buffer_basics.sp`](pawn/scripting/examples/buffer_basics.sp) | Every method of `CurlBuffer`. |
+| [`buffer_whitelist.sp`](pawn/scripting/examples/buffer_whitelist.sp) | Downloads an item whitelist into a `CurlBuffer` and reads it line by line. |
+
+The examples are not part of the release archive.
 
 ## Building
 
-The build uses [AMBuild](https://github.com/alliedmodders/ambuild) and needs source checkouts of SourceMod and
-Metamod:Source (1.12-dev). The dependencies (curl, OpenSSL, nghttp2, libssh2, brotli, zstd, libpsl, zlib) are built
-by `build-deps.sh` with [vcpkg](https://vcpkg.io), at the versions of the `builtin-baseline` in `vcpkg.json`, into
-`deps/`. Without `VCPKG_ROOT` the script clones vcpkg into `vcpkg/` and checks it out at that baseline.
+Most people do not need this: the releases have ready-made binaries. To build the extension yourself you need
 
-On Linux (Ubuntu 22.04 packages; `cmake`, `ninja-build`, `pkg-config`, `git`, `curl`, `zip`, `unzip` and `perl` are
-needed too):
+- [AMBuild](https://github.com/alliedmodders/ambuild) 2.2 or newer,
+- source checkouts of SourceMod (with its submodules) and Metamod:Source, both of the branch `1.12-dev`,
+- a C++17 compiler: clang or GCC 9 or newer on Linux, Visual Studio 2022 on Windows.
+
+The libraries (curl, OpenSSL, nghttp2, libssh2, brotli, zstd, zlib, libpsl and what they need) are built from source
+by `build-deps.sh` with [vcpkg](https://vcpkg.io), at the versions fixed by the `builtin-baseline` in `vcpkg.json`.
+They are built as static libraries into `deps/`.
+
+On Ubuntu 22.04:
 
 ```
-sudo apt install clang gcc-multilib g++-multilib autoconf autoconf-archive automake libtool libltdl-dev
-pip install git+https://github.com/alliedmodders/ambuild
+sudo apt install clang gcc-multilib g++-multilib autoconf autoconf-archive automake libtool libltdl-dev \
+  cmake ninja-build pkg-config git curl zip unzip perl python3 python3-pip
+pip3 install git+https://github.com/alliedmodders/ambuild
+
+git clone --recurse-submodules --branch 1.12-dev https://github.com/alliedmodders/sourcemod
+git clone --branch 1.12-dev https://github.com/alliedmodders/metamod-source
+git clone https://github.com/sapphonie/SM-neocurl-ext
+cd SM-neocurl-ext
 
 ./build-deps.sh
 mkdir build && cd build
-CC=clang CXX=clang++ python ../configure.py --enable-optimize --targets=x86,x86_64 \
-  --sm-path=/path/to/sourcemod --mms-path=/path/to/metamod-source
+CC=clang CXX=clang++ python3 ../configure.py --enable-optimize --targets=x86,x86_64 \
+  --sm-path=../../sourcemod --mms-path=../../metamod-source
 ambuild
 ```
 
-On Windows run the same commands in Git Bash with Visual Studio 2022 installed, without `CC` and `CXX`.
+On Windows, run the same commands in Git Bash with Visual Studio 2022 installed, without `sudo apt install` and
+without `CC=clang CXX=clang++`.
 
-`build-deps.sh` takes vcpkg triplets to build only some of them (`x86-linux`, `x64-linux`, `x86-windows-static`,
-`x64-windows-static`; their overlays are in `triplets/`). `configure.py --deps-path` points to a `deps/` elsewhere.
+The result is in `build/package/`: the `addons/` tree of the release archive, ready to be copied into a game
+directory.
 
-The extension and the files of the archive end up in `build/package/`. The unit tests of `extension/core/` (codecs,
-digests, encodings, paths, the worker pool) are built as `build/extension/tests/curl-tests/<platform>-<arch>/curl-tests`;
-CI runs them for both architectures.
+Details:
 
-`pawn/scripting/curl_ext_test.sp` tests the plugin API on a running server: `sm_curl_ext_test` prints a line per check;
-the WebSocket checks need an echo server at the URL in `curl_ext_test_ws_url`, the HTTP transfer of the methodmaps a
-URL that answers a GET with status 200 in `curl_ext_test_http_url` (both in quotes on the console, since `//` starts a
-comment there).
+- `build-deps.sh` builds the libraries for both architectures of the current operating system. It takes the names
+  of vcpkg triplets as arguments to build only some: `x86-linux`, `x64-linux`, `x86-windows-static`,
+  `x64-windows-static`. Their definitions are in `triplets/`.
+- With the environment variable `VCPKG_ROOT` set, `build-deps.sh` uses that vcpkg as it is. Without it, the script
+  clones vcpkg into `vcpkg/` and checks out the baseline of `vcpkg.json`.
+- `configure.py` options: `--targets` (`x86`, `x86_64` or both, separated by a comma; without it only `x86` is
+  built), `--sm-path` and `--mms-path` (the two checkouts), `--deps-path` (a `deps/` directory somewhere else),
+  `--enable-optimize` and `--enable-debug`. Build with `--enable-optimize` for anything that runs on a game
+  server: a build without it contains debug checks that stop the server where the optimized build reports an error
+  to the plugin.
+- The first build of the libraries takes a long time, since OpenSSL and curl are compiled twice. Later builds of the
+  extension itself take seconds.
+
+## Testing
+
+There are three kinds of tests.
+
+**Unit tests** cover the code that does not need a game server: the compression formats, digests, encodings, path
+rules and the job queue. They are built with the extension, as
+`build/extension/tests/curl-tests/<platform>-<architecture>/curl-tests`. Run the program; it prints
+`All tests passed` and exits with 0, or lists the failed checks and exits with 1.
+
+**The API test plugin**, [`pawn/scripting/curl_ext_test.sp`](pawn/scripting/curl_ext_test.sp), calls the plugin API
+on a running server. Compile it, load it and type `sm_curl_ext_test` on the server console. It prints a line per
+check and a summary:
+
+```
+[curl_ext_test] DONE 75 passed, 0 failed
+```
+
+Two groups of checks need a service to talk to and are skipped until its URL is set. The URLs must be in quotes,
+because `//` starts a comment on the server console:
+
+| Console variable | What it needs |
+|---|---|
+| `curl_ext_test_http_url` | A URL that answers a GET request with status 200. |
+| `curl_ext_test_ws_url` | A WebSocket server that sends every message back (an echo server). |
+
+**The example plugins** in `pawn/scripting/examples/` double as tests of the documentation: the longer code in the
+guides is copied from them.
+
+`pawn/scripting/curl_self_test.sp` is the test plugin of the original cURL extension. It is kept for reference and
+is not maintained.
 
 ## Source layout
 
-- `extension/`: the extension. `natives.cpp`, `curlmanager.cpp`, `curlthread.cpp` and `opensslmanager.cpp` are the
-  libcurl natives and the deprecated hash natives; `api.cpp` and the `*_natives.cpp` files are the CurlBuffer,
-  WebSocket, Compression and Crypt APIs.
-- `extension/core/`: the code of those APIs that does not know SourceMod: codecs, digests, encodings, path rules, the
-  worker pool and the WebSocket session thread.
-- `extension/tests/`: the unit tests of `extension/core/`.
-- `pawn/scripting/`: the include files and the test plugins.
-- `docs/`: the plugin API of the libcurl methodmaps, CurlBuffer, WebSocket, Compression and Crypt.
+| Path | Content |
+|---|---|
+| `extension/` | The extension. `natives.cpp`, `curlmanager.cpp` and `curlthread.cpp` are libcurl's easy interface; `opensslmanager.cpp` and `opensslthread.cpp` the deprecated hash natives; `api.cpp` and the `*_natives.cpp` files are `CurlBuffer`, `WebSocket`, `Compression` and `Crypt`. |
+| `extension/core/` | The parts of those four that know nothing about SourceMod: the compression formats, digests, encodings, path rules, the job queue and the WebSocket connection thread. |
+| `extension/tests/` | The unit tests of `extension/core/`. |
+| `extension/sdk/` | SourceMod's extension SDK files. `smsdk_config.h` has the extension's name and version. |
+| `pawn/scripting/include/` | The include files for plugins. |
+| `pawn/scripting/examples/` | The example plugins. |
+| `pawn/scripting/` | The two test plugins. |
+| `docs/` | The guides. |
+| `AMBuildScript`, `AMBuilder`, `PackageScript`, `configure.py` | The build. `PackageScript` decides what goes into the release archive. |
+| `build-deps.sh`, `vcpkg.json`, `triplets/` | The build of the libraries. |
+| `.github/workflows/ci.yml` | The automatic build, tests and releases. |
 
 ## Releases
 
-CI (`.github/workflows/ci.yml`) builds both platforms on every push and pull request. A pushed tag `vX.Y.Z` that
-matches `SMEXT_CONF_VERSION` in `extension/sdk/smsdk_config.h` publishes the archives as a release.
+Every push and pull request is built for Linux and Windows by GitHub Actions (`.github/workflows/ci.yml`). The
+workflow runs the unit tests for both architectures, checks that the Linux binaries need no newer glibc than 2.34,
+and offers the two archives as build artifacts.
+
+To publish a release:
+
+1. Set the new version in `extension/sdk/smsdk_config.h` (`SMEXT_CONF_VERSION`) and in `vcpkg.json` (`version`).
+2. Commit, and push a tag that is the letter `v` followed by exactly that version, for example `v2.1.0`.
+
+The workflow then creates a GitHub release with both archives. A tag that does not match `SMEXT_CONF_VERSION` is
+built but not released.

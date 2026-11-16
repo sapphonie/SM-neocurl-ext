@@ -65,8 +65,9 @@ typedef CompressBufferCallback = function void (CompressError error, CurlBuffer 
  * Compresses a file into another, in the background.
  *
  * Paths are relative to the game directory, as for SourceMod's file
- * functions, and must not leave it ("..", absolute paths and "file://" are
- * refused). The output is written to "<outFile>.tmp" and renamed onto
+ * functions, and must not leave it: absolute paths, "file://", an empty
+ * path and empty, "." or ".." parts are refused, on Windows also ":". The
+ * output is written to "<outFile>.tmp" and renamed onto
  * outFile once complete; a failed job leaves no file behind and does not
  * touch an existing outFile.
  *

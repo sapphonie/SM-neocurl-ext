@@ -138,7 +138,8 @@ methodmap CurlForm < Handle
 methodmap CurlEasy < Handle
 {
 	/**
-	 * Creates a curl easy handle; see curl_easy_init.
+	 * Creates a curl easy handle; see curl_easy_init. One handle is one
+	 * transfer: its options reach libcurl once, when the transfer starts.
 	 *
 	 * @return              The handle, null on failure. Close it with delete
 	 *                      once its transfer is complete.
@@ -216,7 +217,14 @@ methodmap CurlEasy < Handle
 		return curl_easy_setopt_function(this, opt, callback, value);
 	}
 
-	/** See curl_load_opt. */
+	/**
+	 * Hands the options to libcurl; see curl_load_opt. Needed before
+	 * Perform(), not before PerformThread(), which does it by itself. It
+	 * works once per handle.
+	 *
+	 * @return              CURLE_OK, or the error of the first option
+	 *                      libcurl refused.
+	 */
 	public CURLcode LoadOpt()
 	{
 		return curl_load_opt(this);
@@ -286,13 +294,22 @@ methodmap CurlEasy < Handle
 
 	/* --- transfer --- */
 
-	/** See curl_easy_perform. */
+	/**
+	 * Runs the transfer and returns when it is complete; see
+	 * curl_easy_perform. The server stands still that long. Call LoadOpt()
+	 * first: without it libcurl does not know the options.
+	 */
 	public CURLcode Perform()
 	{
 		return curl_easy_perform(this);
 	}
 
-	/** See curl_easy_perform_thread. */
+	/**
+	 * Runs the transfer on a thread and returns at once; see
+	 * curl_easy_perform_thread. The callback is called in a later game
+	 * frame when the transfer is complete, unless the handle was closed
+	 * before, which ends the transfer.
+	 */
 	public void PerformThread(CURL_OnComplete callback, any value = 0)
 	{
 		curl_easy_perform_thread(this, callback, value);
