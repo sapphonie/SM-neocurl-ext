@@ -836,6 +836,14 @@ void cURLManager::LoadcURLOption(cURLHandle *handle)
 		}
 		if((handle->lasterror = curl_easy_setopt(handle->curl, pInfo3->opt, pInfo3->value)) != CURLE_OK)
 			return;
+
+		// Without a header function libcurl gives the headers to the write
+		// function, which may be the plugin's and expects a handle, not
+		// this file.
+		if(pInfo3->opt == CURLOPT_HEADERDATA)
+		{
+			curl_easy_setopt(handle->curl, CURLOPT_HEADERFUNCTION, curl_write_function_default);
+		}
 	}
 
 	SourceHook::List<cURLOpt_int64 *>::iterator iter4;
