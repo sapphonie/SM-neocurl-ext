@@ -552,9 +552,7 @@ static cell_t sm_curl_hash_file(IPluginContext *pContext, const cell_t *params)
 	Openssl_Hash_pack *hash_pack = new Openssl_Hash_pack();
 	hash_pack->UserData = params[4];
 	hash_pack->path = new char[len+1]{};
-    snprintf(hash_pack->path, len, "%s", filepath);
-	// strncpy(hash_pack->path, filepath, len);
-	hash_pack->path[len] = '\0';
+	memcpy(hash_pack->path, filepath, len);
 
 	hash_pack->hash_callback = pFunction;
 	hash_pack->algorithm = (Openssl_Hash)params[2];
