@@ -359,6 +359,25 @@ static void cUrl_Thread_Finish(void *data)
 		return;
 	}
 
+	// The last progress report, before the complete callback. The plugin
+	// may close the handle in it; then nothing else is called.
+	if(thread->GetRunType() == cURLThread_Type_PERFORM)
+	{
+		bool stop = g_cURLManager.ReportFinalProgress(handle);
+		handle = thread->GetHandle();
+		if(handle == NULL)
+		{
+			thread->EventSignal();
+			return;
+		}
+		// Too late to stop anything, but the plugin gets the result it
+		// asked for, as when it stops a transfer earlier.
+		if(stop && handle->lasterror == CURLE_OK)
+		{
+			handle->lasterror = CURLE_ABORTED_BY_CALLBACK;
+		}
+	}
+
 	IPluginFunction *pFunc = handle->callback_Function[cURL_CallBack_COMPLETE];
 	assert((pFunc != NULL));
 	if(pFunc != NULL)

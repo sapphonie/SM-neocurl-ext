@@ -44,6 +44,7 @@ enum cURL_CallBack {
 
 	cURL_CallBack_WRITE_FUNCTION,
 	cURL_CallBack_READ_FUNCTION,
+	cURL_CallBack_PROGRESS_FUNCTION,
 
 	cURL_CallBack_LAST,
 };
@@ -74,10 +75,14 @@ enum UserData_Type
 	UserData_Type_Send_Recv,
 	UserData_Type_Write_Func,
 	UserData_Type_Read_Func,
+	UserData_Type_Progress_Func,
+
+	UserData_Type_LAST,
 };
 
 struct cURLHandle {
 	cURLHandle():curl(NULL),running(false),finished(false),destroyed(false),lasterror(CURLE_OK),opt_loaded(false),
+		progress_interval_ms(1000),progress_last_ms(0),progress_pending(false),progress_abort(false),
 		thread(NULL),is_udp(false),sockextr(INVALID_SOCKET),send_timeout(60000),recv_timeout(60000)
 	{
 	}
@@ -98,7 +103,17 @@ struct cURLHandle {
 	bool opt_loaded;
 	IPluginFunction *callback_Function[cURL_CallBack_LAST];
 	Handle_t hndl;
-	int UserData[4];
+	int UserData[UserData_Type_LAST];
+
+	/* The plugin's progress callback (CURLOPT_XFERINFOFUNCTION). */
+	// The least time between two reports.
+	long progress_interval_ms;
+	// When the last report was made, on the clock of ProgressClockMs(); read and written by the transfer only.
+	long long progress_last_ms;
+	// A report waits for its game frame; no second one is queued meanwhile.
+	std::atomic<bool> progress_pending;
+	// The plugin's callback asked to stop the transfer.
+	std::atomic<bool> progress_abort;
 	cURLThread *thread;
 	bool is_udp;
 

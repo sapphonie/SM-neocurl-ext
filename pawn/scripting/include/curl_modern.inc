@@ -217,6 +217,32 @@ methodmap CurlEasy < Handle
 		return curl_easy_setopt_function(this, opt, callback, value);
 	}
 
+	/** See curl_easy_set_progress_interval. */
+	public bool SetProgressInterval(float seconds)
+	{
+		return curl_easy_set_progress_interval(this, seconds);
+	}
+
+	/**
+	 * Sets the progress callback and its interval in one call:
+	 * curl_easy_setopt_function with CURLOPT_XFERINFOFUNCTION, and
+	 * curl_easy_set_progress_interval.
+	 *
+	 * @param callback      Called with the bytes received and sent so far
+	 *                      and their totals (0 when unknown), at most once
+	 *                      per interval while the transfer runs and once
+	 *                      more when it has ended. Returning Plugin_Stop
+	 *                      ends the transfer with CURLE_ABORTED_BY_CALLBACK.
+	 * @param interval      The least seconds between two calls.
+	 * @param value         A value passed to the callback.
+	 * @return              False when a transfer of the handle is running.
+	 */
+	public bool SetProgressCallback(CURL_Function_CB callback, float interval = 1.0, any value = 0)
+	{
+		return curl_easy_setopt_function(this, CURLOPT_XFERINFOFUNCTION, callback, value)
+		       && curl_easy_set_progress_interval(this, interval);
+	}
+
 	/**
 	 * Hands the options to libcurl; see curl_load_opt. Needed before
 	 * Perform(), not before PerformThread(), which does it by itself. It

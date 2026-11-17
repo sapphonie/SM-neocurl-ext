@@ -2,6 +2,9 @@
 
 #include "curlmanager.h"
 
+#include <chrono>
+#include <string.h>
+
 #ifdef PLATFORM_LINUX
 #include <netinet/in.h>
 #endif
@@ -179,11 +182,148 @@ static size_t curl_read_function_SM(char *ptr, size_t bytes, size_t nmemb, void 
 	return ret;
 }
 
-/* Ends the transfer of a handle that was closed while it ran. */
+/* Progress Function */
+
+// SourcePawn's Plugin_Stop.
+static const cell_t kPluginStop = 4;
+
+/* The numbers of one progress report, as cells: a cell holds at most this. */
+static cell_t ProgressCell(curl_off_t bytes)
+{
+	const curl_off_t kCellMax = 2147483647;
+	if(bytes < 0)
+		return 0;
+	return (cell_t)(bytes > kCellMax ? kCellMax : bytes);
+}
+
+static long long ProgressClockMs()
+{
+	return std::chrono::duration_cast<std::chrono::milliseconds>(
+		std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+/* Calls the plugin's progress callback. True when it asks to stop the
+ * transfer. Main thread only. */
+static bool Call_Progress_Function(cURLHandle *handle, const cell_t numbers[4])
+{
+	IPluginFunction *pFunc = handle->callback_Function[cURL_CallBack_PROGRESS_FUNCTION];
+	if(pFunc == NULL)
+		return false;
+
+	cell_t result = 0;
+	pFunc->PushCell(handle->hndl);
+	pFunc->PushCell(numbers[0]);
+	pFunc->PushCell(numbers[1]);
+	pFunc->PushCell(numbers[2]);
+	pFunc->PushCell(numbers[3]);
+	pFunc->PushCell(handle->UserData[UserData_Type_Progress_Func]);
+	pFunc->Execute(&result);
+	return result == kPluginStop;
+}
+
+/* A report on its way from a transfer's thread to a game frame. It names
+ * its handle by the plugin's Handle and not by pointer: the handle may be
+ * closed before the frame comes. */
+struct ProgressReport {
+	Handle_t hndl;
+	cell_t numbers[4];
+};
+
+static cURLHandle *ReadProgressHandle(Handle_t hndl)
+{
+	cURLHandle *handle = NULL;
+	HandleSecurity sec(NULL, myself_Identity);
+	if(handlesys->ReadHandle(hndl, g_cURLHandle, &sec, (void **)&handle) != HandleError_None)
+		return NULL;
+	return handle;
+}
+
+static void sm_progress_function_FrameAction(void *data)
+{
+	ProgressReport *report = (ProgressReport *)data;
+	Handle_t hndl = report->hndl;
+	cell_t numbers[4];
+	memcpy(numbers, report->numbers, sizeof(numbers));
+	delete report;
+
+	cURLHandle *handle = ReadProgressHandle(hndl);
+	if(handle == NULL)
+		return;
+
+	bool stop = Call_Progress_Function(handle, numbers);
+
+	// The callback may have closed the handle.
+	handle = ReadProgressHandle(hndl);
+	if(handle == NULL)
+		return;
+
+	if(stop)
+		handle->progress_abort = true;
+	handle->progress_pending = false;
+}
+
+/* libcurl calls this about once a second and whenever data moved. It ends
+ * the transfer of a handle that was closed while it ran or whose plugin
+ * asked to stop, and reports the progress to the plugin. */
 static int curl_xferinfo_function(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
 {
 	cURLHandle *handle = (cURLHandle *)clientp;
-	return handle->destroyed ? 1 : 0;
+	if(handle->destroyed || handle->progress_abort)
+		return 1;
+	if(handle->callback_Function[cURL_CallBack_PROGRESS_FUNCTION] == NULL)
+		return 0;
+
+	long long now = ProgressClockMs();
+	if(handle->progress_last_ms != 0 && now - handle->progress_last_ms < handle->progress_interval_ms)
+		return 0;
+
+	cell_t numbers[4] = { ProgressCell(dlnow), ProgressCell(dltotal), ProgressCell(ulnow), ProgressCell(ultotal) };
+
+	// A blocking transfer runs on the main thread: the plugin is called here.
+	if(handle->thread == NULL)
+	{
+		handle->progress_last_ms = now;
+		if(!Call_Progress_Function(handle, numbers))
+			return 0;
+		// The callback may have closed the handle; then it is only marked.
+		handle->progress_abort = true;
+		return 1;
+	}
+
+	if(g_cURL_SM.IsShutdown())
+		return 0;
+
+	// One report at a time: the transfer does not wait for the game frame,
+	// and reports must not pile up when frames are slow.
+	if(handle->progress_pending.exchange(true))
+		return 0;
+
+	handle->progress_last_ms = now;
+	ProgressReport *report = new ProgressReport();
+	report->hndl = handle->hndl;
+	memcpy(report->numbers, numbers, sizeof(numbers));
+	smutils->AddFrameAction(sm_progress_function_FrameAction, report);
+	return 0;
+}
+
+bool cURLManager::ReportFinalProgress(cURLHandle *handle)
+{
+	if(handle->callback_Function[cURL_CallBack_PROGRESS_FUNCTION] == NULL)
+		return false;
+	// The plugin stopped the transfer: it has had its last report.
+	if(handle->progress_abort)
+		return false;
+
+	curl_off_t dlnow = 0, dltotal = 0, ulnow = 0, ultotal = 0;
+	curl_easy_getinfo(handle->curl, CURLINFO_SIZE_DOWNLOAD_T, &dlnow);
+	curl_easy_getinfo(handle->curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &dltotal);
+	curl_easy_getinfo(handle->curl, CURLINFO_SIZE_UPLOAD_T, &ulnow);
+	curl_easy_getinfo(handle->curl, CURLINFO_CONTENT_LENGTH_UPLOAD_T, &ultotal);
+
+	// libcurl gives -1 for a length it does not know; a progress callback
+	// gets 0 for that, as during the transfer.
+	cell_t numbers[4] = { ProgressCell(dlnow), ProgressCell(dltotal), ProgressCell(ulnow), ProgressCell(ultotal) };
+	return Call_Progress_Function(handle, numbers);
 }
 
 static curl_socket_t curl_opensocket_function(void *clientp, curlsocktype purpose, struct curl_sockaddr *address)
@@ -670,6 +810,10 @@ bool cURLManager::AddcURLOptionFunction(IPluginContext *pContext, cURLHandle *ha
 			index = cURL_CallBack_READ_FUNCTION;
 			handle->UserData[UserData_Type_Read_Func] = value;
 			break;
+		case CURLOPT_XFERINFOFUNCTION:
+			index = cURL_CallBack_PROGRESS_FUNCTION;
+			handle->UserData[UserData_Type_Progress_Func] = value;
+			break;
 	}
 
 	if(index == cURL_CallBack_NOTHING)
@@ -864,7 +1008,8 @@ void cURLManager::LoadcURLOption(cURLHandle *handle)
 	}
 
 	// After the plugin's options, so that its CURLOPT_NOPROGRESS cannot
-	// switch this off: it is what ends the transfer of a closed handle.
+	// switch this off: it is what ends the transfer of a closed handle and
+	// what reports the progress to the plugin.
 	curl_easy_setopt(handle->curl, CURLOPT_XFERINFOFUNCTION, curl_xferinfo_function);
 	curl_easy_setopt(handle->curl, CURLOPT_XFERINFODATA, handle);
 	curl_easy_setopt(handle->curl, CURLOPT_NOPROGRESS, 0L);

@@ -769,6 +769,9 @@ enum CURLoption {
   /* allow GSSAPI credential delegation */
   CINIT(GSSAPI_DELEGATION, LONG, 210),
 
+  /* The progress callback, for curl_easy_setopt_function(). */
+  CINIT(XFERINFOFUNCTION, FUNCTIONPOINT, 219),
+
   CURLOPT_LASTENTRY /* the last unused */
 };
 

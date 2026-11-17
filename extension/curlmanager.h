@@ -23,6 +23,10 @@ public:
 	bool AddcURLOptionHandle(IPluginContext *pContext, cURLHandle *handle, HandleSecurity *sec, CURLoption opt, Handle_t hndl);
 	bool AddcURLOptionFunction(IPluginContext *pContext, cURLHandle *handle, CURLoption opt, IPluginFunction *pFunction, int value);
 	void LoadcURLOption(cURLHandle *handle);
+	// Calls the plugin's progress callback with the final numbers of a
+	// transfer that has ended. True when the callback asks to stop, which
+	// the caller turns into the transfer's result. Main thread only.
+	bool ReportFinalProgress(cURLHandle *handle);
 
 private:
 	void RemoveLinkedICloseHelper(cURLHandle *handle);

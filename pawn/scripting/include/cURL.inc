@@ -230,6 +230,19 @@ typeset Openssl_Hash_Complete
  * @ param any		data		Data passed to curl_easy_setopt_function()
  * @ return 					The number of bytes given with curl_set_send_buffer(),
  * 								at most bytes * nmemb. 0 ends the upload.
+ *
+ * CURLOPT_XFERINFOFUNCTION: called with the progress of the transfer, at
+ * most once per interval (curl_easy_set_progress_interval(), 1 second by
+ * default) while it runs, and once more when it has ended, before the
+ * complete callback. Byte counts above 2147483647 are given as 2147483647.
+ * @ param Handle	hndl			The curl handle
+ * @ param cell_t	downloaded		The bytes received so far
+ * @ param cell_t	downloadTotal	The bytes to receive in total, 0 when unknown
+ * @ param cell_t	uploaded		The bytes sent so far
+ * @ param cell_t	uploadTotal		The bytes to send in total, 0 when unknown
+ * @ param any		data			Data passed to curl_easy_setopt_function()
+ * @ return 						Plugin_Stop to end the transfer; it then completes
+ * 									with CURLE_ABORTED_BY_CALLBACK. Anything else to go on.
  */
 typeset CURL_Function_CB
 {
@@ -240,6 +253,10 @@ typeset CURL_Function_CB
 	// CURLOPT_READFUNCTION
 	function int (Handle hndl, const int bytes, const int nmemb);
 	function int (Handle hndl, const int bytes, const int nmemb, any data);
+
+	// CURLOPT_XFERINFOFUNCTION
+	function Action (Handle hndl, int downloaded, int downloadTotal, int uploaded, int uploadTotal);
+	function Action (Handle hndl, int downloaded, int downloadTotal, int uploaded, int uploadTotal, any data);
 }
 
 /*************************************************************************************************/
@@ -322,6 +339,19 @@ native bool curl_easy_setopt_handle(Handle hndl, CURLoption opt, Handle other_hn
  * @ return bool							1 on success. 0 = The option unsupport or invalid callback function.
  */
 native bool curl_easy_setopt_function(Handle hndl, CURLoption opt, CURL_Function_CB callback, any value=0);
+
+/**
+ * Set the least time between two calls of the progress callback
+ * (CURLOPT_XFERINFOFUNCTION of curl_easy_setopt_function()). 1 second by
+ * default. With 0 the callback is called as often as libcurl reports
+ * progress, at most once per game frame.
+ *
+ * @ param Handle		hndl		The handle of the curl to be used.
+ * @ param Float		seconds		The interval, 0 to 86400.
+ * @ return bool					1 on success. 0 = a transfer of the handle is running.
+ * @ error							An interval outside 0 to 86400.
+ */
+native bool curl_easy_set_progress_interval(Handle hndl, float seconds);
 
 /**
  * Load all CURLoption to curl Handle

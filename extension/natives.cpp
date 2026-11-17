@@ -175,6 +175,22 @@ static cell_t sm_curl_easy_setopt_function(IPluginContext *pContext, const cell_
 	return g_cURLManager.AddcURLOptionFunction(pContext, handle, (CURLoption)params[2], pFunction, params[4]);
 }
 
+static cell_t sm_curl_easy_set_progress_interval(IPluginContext *pContext, const cell_t *params)
+{
+	SETUP_CURL_HANDLE();
+
+	float seconds = sp_ctof(params[2]);
+	if(!(seconds >= 0.0f) || seconds > 86400.0f)
+	{
+		return pContext->ThrowNativeError("Progress interval %f is not from 0 to 86400 seconds", seconds);
+	}
+	if(handle->running)
+		return 0;
+
+	handle->progress_interval_ms = (long)(seconds * 1000.0f);
+	return 1;
+}
+
 static cell_t sm_curl_easy_perform_thread(IPluginContext *pContext, const cell_t *params)
 {
 	SETUP_CURL_HANDLE();
@@ -208,6 +224,17 @@ static cell_t sm_curl_easy_perform(IPluginContext *pContext, const cell_t *param
 		g_cURLManager.RemovecURLHandle(handle);
 		return code;
 	}
+
+	// The last progress report. The plugin may close the handle in it; no
+	// transfer runs anymore, so it is freed at once.
+	Handle_t hndl = handle->hndl;
+	bool stop = g_cURLManager.ReportFinalProgress(handle);
+	if(handlesys->ReadHandle(hndl, g_cURLHandle, &sec, (void **)&handle) != HandleError_None)
+		return code;
+	// Too late to stop anything, but the plugin gets the result it asked
+	// for, as when it stops a transfer earlier.
+	if(stop && code == CURLE_OK)
+		code = CURLE_ABORTED_BY_CALLBACK;
 
 	curl_easy_getinfo(handle->curl, CURLINFO_LASTSOCKET, &handle->sockextr);
 
@@ -619,6 +646,7 @@ sp_nativeinfo_t g_cURLNatives[] =
 	{"curl_easy_setopt_int64",		sm_curl_easy_setopt_int64},
 	{"curl_easy_setopt_handle",		sm_curl_easy_setopt_handle},
 	{"curl_easy_setopt_function",	sm_curl_easy_setopt_function},
+	{"curl_easy_set_progress_interval",	sm_curl_easy_set_progress_interval},
 	{"curl_easy_perform_thread",	sm_curl_easy_perform_thread},
 	{"curl_easy_perform",			sm_curl_easy_perform},
 	{"curl_easy_getinfo_string",	sm_curl_easy_getinfo_string},
