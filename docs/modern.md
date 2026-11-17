@@ -24,6 +24,7 @@ Contents:
 - [Running the transfer](#running-the-transfer)
 - [Receiving the answer](#receiving-the-answer)
 - [Sending data](#sending-data)
+- [Progress reports](#progress-reports)
 - [Reading the result](#reading-the-result)
 - [Handling errors](#handling-errors)
 - [CurlSlist](#curlslist), [CurlForm](#curlform), [CurlFile](#curlfile)
@@ -136,7 +137,7 @@ that is still empty: fill it first, then set it.
 | `SetOptIntArray(array, size)` | several number options at once, see below |
 | `SetOptInt64(option, value)` | a number that may exceed 2147483647, written as decimal text: `"5000000000"` |
 | `SetOptHandle(option, handle)` | a `CurlFile`, `CurlForm` or `CurlSlist` |
-| `SetOptFunction(option, callback, value = 0)` | a callback: `CURLOPT_WRITEFUNCTION` or `CURLOPT_READFUNCTION` |
+| `SetOptFunction(option, callback, value = 0)` | a callback: `CURLOPT_WRITEFUNCTION`, `CURLOPT_READFUNCTION` or `CURLOPT_XFERINFOFUNCTION` |
 
 For example, from [`curl_map_download.sp`](../pawn/scripting/examples/curl_map_download.sp):
 
@@ -239,10 +240,13 @@ One value is often not enough. A `DataPack` carries several, as in
 [`curl_map_download.sp`](../pawn/scripting/examples/curl_map_download.sp):
 
 ```sourcepawn
-// The callback needs the file handle and the map's name.
+// The callbacks need the file handle and the map's name.
 DataPack pack = new DataPack();
 pack.WriteCell(file);
 pack.WriteString(map);
+
+// Report the progress once a second while the download runs.
+easy.SetProgressCallback(OnProgress, 1.0, pack);
 easy.PerformThread(OnDownloaded, pack);
 ```
 
@@ -613,6 +617,143 @@ public int OnUploadData(CurlEasy easy, const int bytes, const int nmemb)
 When a read callback is set, a file set with `SetReadFile` is ignored. Like a write callback, a read callback is
 called in a game frame, one piece per frame.
 
+## Progress reports
+
+A large download or upload takes a while, and a plugin may want to show how far it is, or stop it. For that a
+transfer can call a progress callback while it runs.
+
+<!-- not-an-excerpt -->
+```sourcepawn
+bool CurlEasy.SetProgressCallback(CURL_Function_CB callback, float interval = 1.0, any value = 0)
+```
+
+<!-- not-an-excerpt -->
+```sourcepawn
+public Action OnProgress(CurlEasy easy, int downloaded, int downloadTotal, int uploaded, int uploadTotal, any value)
+```
+
+- `downloaded` and `uploaded` are the bytes received and sent so far.
+- `downloadTotal` and `uploadTotal` are the bytes to receive and to send in total. A total is 0 when it is not
+  known: a server does not always say how large its answer is, and a request without a body has nothing to upload.
+  Test `total > 0` before computing a percentage.
+- `value` is the third argument of `SetProgressCallback`. It may be left out, or declared with its real type.
+- The return value decides whether the transfer goes on: `Plugin_Stop` ends it, anything else lets it continue.
+
+All four numbers count the body of the request or answer, not its headers. A number above 2147483647, the largest
+an `int` holds, is given as 2147483647.
+
+### When the callback is called
+
+- While the transfer runs: when there is progress to report, but at most once per `interval` seconds. An interval of
+  0 means as often as libcurl reports, which is at most once per game frame for a threaded transfer.
+- Once more when the transfer has ended, with the final numbers, right before the complete callback. A progress
+  display therefore always reaches its last state, also for a transfer that was over before the first interval
+  passed.
+
+Like every callback it runs on the main thread, in a game frame. A threaded transfer does not wait for it: the
+numbers a callback gets are those of the moment the report was made, a frame earlier.
+
+From [`curl_map_download.sp`](../pawn/scripting/examples/curl_map_download.sp):
+
+```sourcepawn
+// Report the progress once a second while the download runs.
+easy.SetProgressCallback(OnProgress, 1.0, pack);
+easy.PerformThread(OnDownloaded, pack);
+```
+
+```sourcepawn
+public Action OnProgress(CurlEasy easy, int downloaded, int downloadTotal, int uploaded, int uploadTotal, DataPack pack)
+{
+	char map[64];
+	pack.Reset();
+	pack.ReadCell();
+	pack.ReadString(map, sizeof(map));
+
+	if (downloaded > g_MaxSize.IntValue) {
+		LogError("%s is larger than %d bytes; stopping the download", map, g_MaxSize.IntValue);
+		// The transfer ends with CURLE_ABORTED_BY_CALLBACK, and
+		// OnDownloaded cleans up as after any failed download.
+		return Plugin_Stop;
+	}
+
+	if (downloadTotal > 0) {
+		// Float arithmetic: downloaded * 100 would overflow above 21 MB.
+		int percent = RoundToFloor(float(downloaded) / float(downloadTotal) * 100.0);
+		PrintToServer("Downloading %s: %d%% (%d of %d bytes)", map, percent, downloaded, downloadTotal);
+	} else {
+		PrintToServer("Downloading %s: %d bytes so far", map, downloaded);
+	}
+	return Plugin_Continue;
+}
+```
+
+A map of 3 MB from a server that takes four seconds to send it:
+
+```
+Downloading cp_slow: 0 bytes so far
+Downloading cp_slow: 30% (948228 of 3072000 bytes)
+Downloading cp_slow: 55% (1716232 of 3072000 bytes)
+Downloading cp_slow: 80% (2484236 of 3072000 bytes)
+Downloading cp_slow: 100% (3072000 of 3072000 bytes)
+Downloaded maps/cp_slow.bsp: 3072000 bytes in 3.7 seconds
+```
+
+The first report comes before the server has answered, so nothing is known about the size yet.
+
+### Stopping a transfer
+
+When the callback returns `Plugin_Stop`, the transfer ends and its complete callback is called with the code
+`CURLE_ABORTED_BY_CALLBACK`, so everything is cleaned up in the usual place. The example above uses that for a size
+limit: a server can send more than it announced, or announce nothing at all, and the callback notices either.
+
+With `sm_downloadmap_max_size 500000` the same download ends like this:
+
+```
+cp_slow_large is larger than 500000 bytes; stopping the download
+Download of cp_slow_large failed: Callback aborted
+```
+
+After `Plugin_Stop` the callback is not called again, also not for the final report.
+
+`Plugin_Stop` from the final report, when the transfer is over already, cannot stop anything anymore. The complete
+callback still gets `CURLE_ABORTED_BY_CALLBACK` instead of `CURLE_OK` then, so a plugin handles both cases the same
+way.
+
+### Uploads, and the two ways to set the callback
+
+For an upload the last two numbers matter. `SetProgressCallback` is a shortcut for two calls, which can also be
+made separately: the callback is an option like the write and read callbacks, and the interval a setting of its own.
+From [`curl_demo_upload.sp`](../pawn/scripting/examples/curl_demo_upload.sp):
+
+```sourcepawn
+// The same as SetProgressCallback(OnUploadProgress, 2.0): the callback
+// is an option like the write callback, the interval a setting of its own.
+easy.SetOptFunction(CURLOPT_XFERINFOFUNCTION, OnUploadProgress);
+easy.SetProgressInterval(2.0);
+```
+
+```sourcepawn
+public Action OnUploadProgress(CurlEasy easy, int downloaded, int downloadTotal, int uploaded, int uploadTotal)
+{
+	if (uploadTotal > 0) {
+		PrintToServer("Uploading: %d of %d bytes", uploaded, uploadTotal);
+	}
+	return Plugin_Continue;
+}
+```
+
+For a demo of 400007 bytes on a fast connection, only the final report appears:
+
+```
+Uploading: 400643 of 400643 bytes
+```
+
+`SetProgressInterval(seconds)` takes 0 to 86400 seconds; anything else throws an error. Without it the interval is
+1 second. Both methods return `false` while a transfer of the handle runs.
+
+A blocking transfer (`Perform`) reports its progress too. Its callback is called from inside `Perform`, while the
+server stands still.
+
 ## Reading the result
 
 After the transfer, in the complete callback and before the `CurlEasy` is deleted:
@@ -798,6 +939,10 @@ easy.SetForm(g_Form);  // Setting a form makes the request a POST.
 easy.SetOptFunction(CURLOPT_WRITEFUNCTION, OnAnswerData);
 easy.SetOptInt(CURLOPT_CONNECTTIMEOUT, 10);
 easy.SetTimeout(300);
+// The same as SetProgressCallback(OnUploadProgress, 2.0): the callback
+// is an option like the write callback, the interval a setting of its own.
+easy.SetOptFunction(CURLOPT_XFERINFOFUNCTION, OnUploadProgress);
+easy.SetProgressInterval(2.0);
 easy.PerformThread(OnUploaded);
 ```
 
@@ -1035,8 +1180,8 @@ are and were run on a test server.
 | Plugin | What it does | What it shows |
 |---|---|---|
 | [`curl_discord_webhook.sp`](../pawn/scripting/examples/curl_discord_webhook.sp) | Posts map changes and `sm_discord <message>` to a Discord channel. | A JSON POST, request headers, status and error handling. |
-| [`curl_map_download.sp`](../pawn/scripting/examples/curl_map_download.sp) | `sm_downloadmap <map>` fetches a map from a fast download server into `maps/`. | Downloading to a file, redirects, timeouts, `CURLOPT_FAILONERROR`, a `DataPack` for the callback. |
-| [`curl_demo_upload.sp`](../pawn/scripting/examples/curl_demo_upload.sp) | `sm_uploaddemo <file>` uploads a SourceTV demo to demos.tf. | A form with fields and a file, a short answer read by a write callback. |
+| [`curl_map_download.sp`](../pawn/scripting/examples/curl_map_download.sp) | `sm_downloadmap <map>` fetches a map from a fast download server into `maps/`. | Downloading to a file, redirects, timeouts, `CURLOPT_FAILONERROR`, a `DataPack` for the callbacks, progress reports and a size limit. |
+| [`curl_demo_upload.sp`](../pawn/scripting/examples/curl_demo_upload.sp) | `sm_uploaddemo <file>` uploads a SourceTV demo to demos.tf. | A form with fields and a file, a short answer read by a write callback, upload progress. |
 | [`curl_etf2l_player.sp`](../pawn/scripting/examples/curl_etf2l_player.sp) | `sm_etf2l_lookup <SteamID64>` asks the ETF2L API for a player. | A GET whose answer is collected in a `CurlBuffer`, URL encoding, the content type. |
 | [`curl_basics.sp`](../pawn/scripting/examples/curl_basics.sp) | Four small console commands. | A blocking transfer, a header file, PUT uploads from a file and from a callback, the libcurl information. |
 | [`curl_tcp_client.sp`](../pawn/scripting/examples/curl_tcp_client.sp) | `sm_tcp_send <address> <text>` sends a line to a TCP or UDP service and prints the answer. | Raw connections with send & receive. |
@@ -1128,7 +1273,9 @@ ETF2L name: Nace (181 bytes of application/json)
 | `SetOptIntArray(int[][] array, int size)` | `curl_easy_setopt_int_array` | `bool`: `false` when one of the options was not accepted; the ones before it are set. |
 | `SetOptInt64(CURLoption option, const char[] value)` | `curl_easy_setopt_int64` | `bool` |
 | `SetOptHandle(CURLoption option, Handle other)` | `curl_easy_setopt_handle` | `bool` |
-| `SetOptFunction(CURLoption option, CURL_Function_CB callback, any value = 0)` | `curl_easy_setopt_function` | `bool`: `false` for any option but `CURLOPT_WRITEFUNCTION` and `CURLOPT_READFUNCTION`. |
+| `SetOptFunction(CURLoption option, CURL_Function_CB callback, any value = 0)` | `curl_easy_setopt_function` | `bool`: `false` for any option but `CURLOPT_WRITEFUNCTION`, `CURLOPT_READFUNCTION` and `CURLOPT_XFERINFOFUNCTION`. |
+| `SetProgressInterval(float seconds)` | `curl_easy_set_progress_interval` | `bool` |
+| `SetProgressCallback(CURL_Function_CB callback, float interval = 1.0, any value = 0)` | `curl_easy_setopt_function`, `curl_easy_set_progress_interval` | `bool` |
 | `SetUrl`, `SetUserAgent`, `SetPostFields` | `curl_easy_setopt_string` | `bool` |
 | `SetTimeout`, `SetFollowLocation` | `curl_easy_setopt_int` | `bool` |
 | `SetHeaders`, `SetForm`, `SetWriteFile`, `SetReadFile`, `SetHeaderFile` | `curl_easy_setopt_handle` | `bool` |
@@ -1180,6 +1327,7 @@ its last parameter, the value.
 | `CURL_OnComplete` | `void (Handle easy, CURLcode code, any value)` | `PerformThread`, `SendRecv` |
 | `CURL_Function_CB` (write) | `int (Handle easy, const char[] buffer, const int bytes, const int nmemb, any value)` | `SetOptFunction(CURLOPT_WRITEFUNCTION, ...)` |
 | `CURL_Function_CB` (read) | `int (Handle easy, const int bytes, const int nmemb, any value)` | `SetOptFunction(CURLOPT_READFUNCTION, ...)` |
+| `CURL_Function_CB` (progress) | `Action (Handle easy, int downloaded, int downloadTotal, int uploaded, int uploadTotal, any value)` | `SetProgressCallback`, `SetOptFunction(CURLOPT_XFERINFOFUNCTION, ...)` |
 | `CURL_OnSend` | `SendRecv_Act (Handle easy, CURLcode code, const int sentBytes, any value)` | `SendRecv` |
 | `CURL_OnReceive` | `SendRecv_Act (Handle easy, CURLcode code, const char[] data, const int size, any value)` | `SendRecv` |
 
@@ -1237,7 +1385,8 @@ Options that take a handle (`SetOptHandle`):
 | `CurlForm` | `CURLOPT_HTTPPOST` |
 | `CurlSlist` | `CURLOPT_HTTPHEADER`, `CURLOPT_QUOTE`, `CURLOPT_POSTQUOTE`, `CURLOPT_PREQUOTE`, `CURLOPT_TELNETOPTIONS`, `CURLOPT_HTTP200ALIASES`, `CURLOPT_MAIL_RCPT`, `CURLOPT_RESOLVE` |
 
-Options that take a callback (`SetOptFunction`): `CURLOPT_WRITEFUNCTION`, `CURLOPT_READFUNCTION`
+Options that take a callback (`SetOptFunction`): `CURLOPT_WRITEFUNCTION`, `CURLOPT_READFUNCTION`,
+`CURLOPT_XFERINFOFUNCTION`
 
 The option names are those of the libcurl version the extension was first written for. A few of them are deprecated
 in the libcurl it links today; libcurl still accepts them, and what each one does now is told on its page in
@@ -1294,6 +1443,8 @@ The infos that are lists (`CURLINFO_SSL_ENGINES`, `CURLINFO_COOKIELIST`, `CURLIN
 - **Building a URL from unescaped text.** Spaces, `&`, `#`, `?` and other characters change the meaning of a URL. Run
   every value through `Escape` first.
 - **Typing URLs without quotes on the server console.** `//` starts a comment and `:` separates arguments there.
+- **Computing a percentage with integers.** `downloaded * 100 / downloadTotal` overflows above 21 MB. Divide as
+  floats, and only when the total is above 0.
 - **Leaving handles open.** Every `CurlEasy`, `CurlSlist`, `CurlForm` and `CurlFile` stays in memory until it is
   deleted or the plugin unloads. A plugin that makes many requests and never deletes runs into SourceMod's handle
   limit.

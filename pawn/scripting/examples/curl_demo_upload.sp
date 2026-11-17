@@ -1,8 +1,9 @@
 /**
  * Example: upload a SourceTV demo to demos.tf.
  *
- * Shows a multipart/formdata POST with CurlForm (text fields and a file) and
- * reading a short answer into the plugin's memory with a write callback.
+ * Shows a multipart/formdata POST with CurlForm (text fields and a file),
+ * reading a short answer into the plugin's memory with a write callback, and
+ * a progress callback that reports how much of the upload is sent.
  *
  * demos.tf answers every upload with status 200 and one line of text:
  * "STV available at: https://demos.tf/<number>" on success, otherwise the
@@ -84,6 +85,10 @@ public Action Command_UploadDemo(int client, int args)
 	easy.SetOptFunction(CURLOPT_WRITEFUNCTION, OnAnswerData);
 	easy.SetOptInt(CURLOPT_CONNECTTIMEOUT, 10);
 	easy.SetTimeout(300);
+	// The same as SetProgressCallback(OnUploadProgress, 2.0): the callback
+	// is an option like the write callback, the interval a setting of its own.
+	easy.SetOptFunction(CURLOPT_XFERINFOFUNCTION, OnUploadProgress);
+	easy.SetProgressInterval(2.0);
 	easy.PerformThread(OnUploaded);
 
 	ReplyToCommand(client, "Uploading %s ...", file);
@@ -107,6 +112,19 @@ public int OnAnswerData(CurlEasy easy, const char[] buffer, const int bytes, con
 	}
 	g_Answer[used + count] = '\0';
 	return length;
+}
+
+/**
+ * Called at most every two seconds during the upload and once at its end.
+ * The upload counts are those of the whole request body: the demo and the
+ * form around it.
+ */
+public Action OnUploadProgress(CurlEasy easy, int downloaded, int downloadTotal, int uploaded, int uploadTotal)
+{
+	if (uploadTotal > 0) {
+		PrintToServer("Uploading: %d of %d bytes", uploaded, uploadTotal);
+	}
+	return Plugin_Continue;
 }
 
 public void OnUploaded(CurlEasy easy, CURLcode code)

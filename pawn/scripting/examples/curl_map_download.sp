@@ -3,11 +3,14 @@
  *
  * Shows a download into a file with CurlFile: redirects, a connect timeout,
  * giving up on a stalled download, treating an HTTP error status as a failed
- * transfer, and publishing the file only when it is complete.
+ * transfer, publishing the file only when it is complete, and a progress
+ * callback that reports how far the download is and stops one that grows
+ * too large.
  *
  *   sm_downloadmap cp_process_f12
  *
- * The map is fetched from <sm_downloadmap_url>/<map>.bsp into maps/.
+ * The map is fetched from <sm_downloadmap_url>/<map>.bsp into maps/. A
+ * download larger than sm_downloadmap_max_size bytes is stopped.
  */
 #pragma semicolon 1
 #pragma newdecls required
@@ -24,11 +27,14 @@ public Plugin myinfo = {
 };
 
 ConVar g_BaseUrl;
+ConVar g_MaxSize;
 
 public void OnPluginStart()
 {
 	g_BaseUrl = CreateConVar("sm_downloadmap_url", "https://fastdl.serveme.tf/maps",
 	                         "Where sm_downloadmap fetches maps from, without a trailing slash");
+	g_MaxSize = CreateConVar("sm_downloadmap_max_size", "536870912",
+	                         "The most bytes a map may have; a larger download is stopped", _, true, 1.0);
 	RegAdminCmd("sm_downloadmap", Command_DownloadMap, ADMFLAG_CHANGEMAP, "sm_downloadmap <map> - downloads a map");
 }
 
@@ -77,14 +83,45 @@ public Action Command_DownloadMap(int client, int args)
 	easy.SetOptInt(CURLOPT_LOW_SPEED_LIMIT, 1000);
 	easy.SetOptInt(CURLOPT_LOW_SPEED_TIME, 30);
 
-	// The callback needs the file handle and the map's name.
+	// The callbacks need the file handle and the map's name.
 	DataPack pack = new DataPack();
 	pack.WriteCell(file);
 	pack.WriteString(map);
+
+	// Report the progress once a second while the download runs.
+	easy.SetProgressCallback(OnProgress, 1.0, pack);
 	easy.PerformThread(OnDownloaded, pack);
 
 	ReplyToCommand(client, "Downloading %s ...", url);
 	return Plugin_Handled;
+}
+
+/**
+ * Called at most once a second during the download, and once more at its
+ * end. The totals are 0 when the server did not say how large the file is.
+ */
+public Action OnProgress(CurlEasy easy, int downloaded, int downloadTotal, int uploaded, int uploadTotal, DataPack pack)
+{
+	char map[64];
+	pack.Reset();
+	pack.ReadCell();
+	pack.ReadString(map, sizeof(map));
+
+	if (downloaded > g_MaxSize.IntValue) {
+		LogError("%s is larger than %d bytes; stopping the download", map, g_MaxSize.IntValue);
+		// The transfer ends with CURLE_ABORTED_BY_CALLBACK, and
+		// OnDownloaded cleans up as after any failed download.
+		return Plugin_Stop;
+	}
+
+	if (downloadTotal > 0) {
+		// Float arithmetic: downloaded * 100 would overflow above 21 MB.
+		int percent = RoundToFloor(float(downloaded) / float(downloadTotal) * 100.0);
+		PrintToServer("Downloading %s: %d%% (%d of %d bytes)", map, percent, downloaded, downloadTotal);
+	} else {
+		PrintToServer("Downloading %s: %d bytes so far", map, downloaded);
+	}
+	return Plugin_Continue;
 }
 
 public void OnDownloaded(CurlEasy easy, CURLcode code, DataPack pack)

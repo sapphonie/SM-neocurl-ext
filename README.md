@@ -23,7 +23,7 @@ file; nothing else has to be installed.
 
 | Feature | Methodmaps | Guide |
 |---|---|---|
-| HTTP requests, downloads, uploads, web forms, raw TCP and UDP connections | `CurlEasy`, `CurlSlist`, `CurlForm`, `CurlFile` | [HTTP and other transfers](docs/modern.md) |
+| HTTP requests, downloads and uploads with progress reports, web forms, raw TCP and UDP connections | `CurlEasy`, `CurlSlist`, `CurlForm`, `CurlFile` | [HTTP and other transfers](docs/modern.md) |
 | WebSocket connections (`ws://` and `wss://`) with keepalive and automatic reconnecting | `WebSocket` | [WebSocket](docs/websocket.md) |
 | gzip, zlib, deflate, brotli and zstd, for files and for data in memory | `Compression` | [Compression](docs/compression.md) |
 | MD5, SHA-1, SHA-2, SHA-3, BLAKE2, SM3, Keccak-256, CRC-32 and Adler-32 digests, and HMACs | `Crypt` | [Crypt](docs/crypt.md) |
