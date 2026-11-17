@@ -292,7 +292,8 @@ class ExtensionConfig(object):
     cxx.linkflags += ['-static-libstdc++']
 
   def configure_windows(self, cxx):
-    cxx.defines += ['WIN32', '_WINDOWS']
+    # NOMINMAX: windows.h must not define min and max as macros, which break std::min and std::max.
+    cxx.defines += ['WIN32', '_WINDOWS', 'NOMINMAX']
     
   # The version the extension reports (SMEXT_CONF_VERSION), the only place it is written down.
   @property
