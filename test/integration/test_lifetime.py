@@ -70,6 +70,27 @@ def test_handle_deleted_in_the_write_callback_of_a_blocking_transfer(server, lif
     assert code in (23, 42)
 
 
+def test_progress_of_a_blocking_transfer(server, lifetime, http):
+    lifetime('lt_progress_blocking "%s/big.txt" 0' % http.url)
+    log = server.wait_for_log("[lifetime] progress_blocking:")
+
+    code, calls, downloaded = map(int, re.search(r"code (\d+), (\d+) calls, (\d+) bytes", log).groups())
+    assert code == 0
+    assert calls >= 1
+    assert downloaded == len(services.BIG_TEXT)
+
+
+def test_progress_callback_stops_a_blocking_transfer(server, lifetime, http):
+    lifetime('lt_progress_blocking "%s/big.txt" 1' % http.url)
+    # CURLE_ABORTED_BY_CALLBACK (42)
+    server.wait_for_log("[lifetime] progress_blocking: code 42,")
+
+
+def test_handle_deleted_in_its_progress_callback(server, lifetime, http):
+    lifetime('lt_delete_in_progress "%s/maps/cp_slow.bsp"' % http.url)
+    server.wait_for_log("[lifetime] delete_in_progress: deleted in the callback")
+
+
 def test_handle_deleted_during_its_transfer(server, lifetime, http):
     before = len(http.slow_requests)
     lifetime('lt_slow_request "%s/slow"' % http.url)

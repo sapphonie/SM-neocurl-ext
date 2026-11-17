@@ -8,6 +8,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 
 import services
 from helpers import DEMO_BYTES, UPLOAD_FILE, wait_until
@@ -49,6 +50,33 @@ def test_map_download_leaves_nothing_for_a_missing_map(server, console, http):
     assert not server.file_exists("maps/cp_missing.bsp.part")
 
 
+def test_map_download_reports_its_progress(server, console, http):
+    console('sm_downloadmap_url "%s/maps"' % http.url, "sm_downloadmap cp_slow")
+    log = server.wait_for_log("Downloaded maps/cp_slow.bsp: %d bytes" % len(services.MAP_BYTES), timeout=40)
+
+    total = len(services.MAP_BYTES)
+    pattern = r"Downloading cp_slow: (\d+)% \((\d+) of " + str(total) + r" bytes\)"
+    reports = [(int(percent), int(done)) for percent, done in re.findall(pattern, log)]
+    # About one report a second while the stand-in sends for four seconds, and one at the end.
+    assert len(reports) >= 3
+    assert reports == sorted(reports)
+    assert reports[-1] == (100, total)
+    assert 0 < reports[1][1] < total
+
+
+def test_map_download_stops_a_map_that_is_too_large(server, console, http):
+    console('sm_downloadmap_url "%s/maps"' % http.url, "sm_downloadmap_max_size 500000",
+            "sm_downloadmap cp_slow_large")
+    try:
+        log = server.wait_for_log("Download of cp_slow_large failed: ", timeout=40)
+    finally:
+        console("sm_downloadmap_max_size 536870912")
+
+    assert "cp_slow_large is larger than 500000 bytes; stopping the download" in log
+    assert not server.file_exists("maps/cp_slow_large.bsp")
+    assert not server.file_exists("maps/cp_slow_large.bsp.part")
+
+
 def test_demo_upload_reports_a_refused_upload(server, console, http):
     console('sm_demostf_url "%s/upload"' % http.url, "sm_demostf_apikey wrongkey", "sm_uploaddemo " + UPLOAD_FILE)
     server.wait_for_log("demos.tf refused the upload (HTTP status 200): Invalid key")
@@ -57,7 +85,12 @@ def test_demo_upload_reports_a_refused_upload(server, console, http):
 def test_demo_upload_sends_the_form(server, console, http):
     console('sm_demostf_url "%s/upload"' % http.url, "sm_demostf_apikey " + services.DEMOSTF_API_KEY,
             "sm_uploaddemo " + UPLOAD_FILE)
-    server.wait_for_log("Demo uploaded: " + services.DEMOSTF_LINK)
+    log = server.wait_for_log("Demo uploaded: " + services.DEMOSTF_LINK)
+
+    # The last progress report has the whole request body: the demo and the form around it.
+    uploaded, total = map(int, re.findall(r"Uploading: (\d+) of (\d+) bytes", log)[-1])
+    assert uploaded == total
+    assert total > len(DEMO_BYTES)
 
     fields = http.requests_to("/upload")[-1].fields
     assert set(fields) == {"key", "name", "red", "blu", "demo"}

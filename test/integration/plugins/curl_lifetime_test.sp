@@ -36,6 +36,8 @@ public void OnPluginStart()
 	RegServerCmd("lt_header_and_callback", Command_HeaderAndCallback, "lt_header_and_callback <url> - a header file and a write callback");
 	RegServerCmd("lt_early_delete", Command_EarlyDelete, "lt_early_delete <url> - deletes a list and a file before the transfer");
 	RegServerCmd("lt_sendrecv_value", Command_SendRecvValue, "lt_sendrecv_value <host:port> - the value of SendRecv's callbacks");
+	RegServerCmd("lt_progress_blocking", Command_ProgressBlocking, "lt_progress_blocking <url> <stop> - progress of a blocking transfer");
+	RegServerCmd("lt_delete_in_progress", Command_DeleteInProgress, "lt_delete_in_progress <url> - deletes in the progress callback");
 }
 
 /* --- A handle that is closed, or whose plugin unloads, during its transfer --- */
@@ -225,4 +227,61 @@ public void OnValueComplete(CurlEasy easy, CURLcode code, any value)
 {
 	PrintToServer("[lifetime] sendrecv_value: send %d, complete %d", g_SendValue, value);
 	delete easy;
+}
+
+/* --- The progress callback of a blocking transfer --- */
+
+int g_ProgressCalls;
+int g_ProgressDownloaded;
+bool g_ProgressStop;
+
+public Action Command_ProgressBlocking(int args)
+{
+	char url[256];
+	GetCmdArg(1, url, sizeof(url));
+	g_ProgressStop = GetCmdArgInt(2) != 0;
+	g_ProgressCalls = 0;
+	g_ProgressDownloaded = 0;
+
+	CurlEasy easy = new CurlEasy();
+	easy.SetUrl(url);
+	easy.SetProgressCallback(OnBlockingProgress, 0.0, 333);
+	easy.LoadOpt();
+	CURLcode code = easy.Perform();
+	delete easy;
+	PrintToServer("[lifetime] progress_blocking: code %d, %d calls, %d bytes", code, g_ProgressCalls,
+	              g_ProgressDownloaded);
+	return Plugin_Handled;
+}
+
+public Action OnBlockingProgress(CurlEasy easy, int downloaded, int downloadTotal, int uploaded, int uploadTotal,
+                                 any value)
+{
+	if (value != 333) {
+		PrintToServer("[lifetime] UNEXPECTED progress value %d", value);
+	}
+	g_ProgressCalls++;
+	g_ProgressDownloaded = downloaded;
+	return g_ProgressStop ? Plugin_Stop : Plugin_Continue;
+}
+
+/* --- A handle that is deleted inside its progress callback --- */
+
+public Action Command_DeleteInProgress(int args)
+{
+	char url[256];
+	GetCmdArg(1, url, sizeof(url));
+
+	g_Kept = new CurlEasy();
+	g_Kept.SetUrl(url);
+	g_Kept.SetProgressCallback(OnProgressDelete, 0.2);
+	g_Kept.PerformThread(OnUnexpectedComplete);
+	return Plugin_Handled;
+}
+
+public Action OnProgressDelete(CurlEasy easy, int downloaded, int downloadTotal, int uploaded, int uploadTotal)
+{
+	delete g_Kept;
+	PrintToServer("[lifetime] delete_in_progress: deleted in the callback");
+	return Plugin_Continue;
 }

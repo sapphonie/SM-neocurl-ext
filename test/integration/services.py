@@ -38,6 +38,9 @@ BANNED_ITEMS = ["The Reserve Shooter", "Bonk! Atomic Punch", "Crit-a-Cola", "Mad
 BIG_TEXT = "".join("line %06d of the big file\n" % number for number in range(8000)).encode()
 # How long /slow keeps a request open without answering it.
 SLOW_SECONDS = 60
+# /maps/cp_slow.bsp and /maps/cp_slow_large.bsp send the map in this many pieces over this many seconds.
+SLOW_BODY_PIECES = 16
+SLOW_BODY_SECONDS = 4
 
 
 def whitelist_text():
@@ -142,6 +145,8 @@ class _HttpHandler(BaseHTTPRequestHandler):
             return self._answer(200, whitelist_text())
         if path == "/maps/cp_test.bsp":
             return self._answer(200, MAP_BYTES, "application/octet-stream")
+        if path in ("/maps/cp_slow.bsp", "/maps/cp_slow_large.bsp"):
+            return self._answer_slowly(MAP_BYTES)
         if path == "/slow":
             return self._hold_open()
         if path.startswith("/player/"):
@@ -149,6 +154,22 @@ class _HttpHandler(BaseHTTPRequestHandler):
         return self._answer(404, "not found")
 
     do_HEAD = do_GET
+
+    def _answer_slowly(self, body):
+        """Sends the body in pieces over SLOW_BODY_SECONDS, so that a transfer has progress to report."""
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        piece = len(body) // SLOW_BODY_PIECES + 1
+        try:
+            for start in range(0, len(body), piece):
+                self.wfile.write(body[start:start + piece])
+                self.wfile.flush()
+                time.sleep(SLOW_BODY_SECONDS / SLOW_BODY_PIECES)
+        except OSError:
+            # The client stopped the transfer.
+            self.close_connection = True
 
     def _hold_open(self):
         """Answers nothing; records how long the client stayed."""
