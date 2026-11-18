@@ -120,7 +120,11 @@ jobs:
       - name: Run the unit tests
         working-directory: extension/build/extension/tests/curl-tests
         run: |
-          for program in */curl-tests*; do
+          suffix=
+          if [ "${{ matrix.os }}" = windows ]; then
+            suffix=.exe
+          fi
+          for program in */curl-tests$suffix; do
             echo "== $program"
             "./$program"
           done
