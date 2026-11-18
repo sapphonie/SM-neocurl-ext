@@ -27,6 +27,8 @@ fi
 if [ -n "${VCPKG_ROOT:-}" ]; then
 	vcpkg_root=$VCPKG_ROOT
 else
+	# vcpkg takes an empty VCPKG_ROOT for a path and fails on it on Windows.
+	unset VCPKG_ROOT
 	vcpkg_root=$root/vcpkg
 	if [ ! -d "$vcpkg_root/.git" ]; then
 		git clone https://github.com/microsoft/vcpkg "$vcpkg_root"
