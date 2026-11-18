@@ -61,6 +61,8 @@ jobs:
         if: matrix.os == 'linux'
         run: |
           sudo apt-get update
+          # The runner also has GCC 12, whose libraries clang would link for 64-bit; its libgcc_eh needs glibc 2.35.
+          sudo apt-get remove -yq libgcc-12-dev
           # autoconf-archive and libltdl-dev for the autoreconf of libidn2
           sudo apt-get install -yq --no-install-recommends clang gcc-multilib g++-multilib \
             autoconf autoconf-archive automake libtool libltdl-dev
