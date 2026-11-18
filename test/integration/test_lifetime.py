@@ -139,6 +139,15 @@ def test_read_callback_that_gives_more_than_asked_for(server, lifetime, http):
     assert re.search(r"Read callback of curl_lifetime_test\.smx returned \d+ bytes", log)
 
 
+def test_second_transfer_on_a_running_handle_is_refused(server, lifetime, http):
+    lifetime('lt_second_transfer "%s/slow"' % http.url)
+    server.wait_for_log("[lifetime] second_transfer: first started")
+    log = server.wait_for_log("is still running")
+    lifetime("lt_delete_kept")
+
+    assert re.search(r"Exception reported: A transfer of handle \w+ is still running", log)
+
+
 def unload_extension(server, lifetime):
     """Unloads the extension, which unloads every plugin that uses it."""
     number = re.search(r"\[(\d+)\] NEO cURL Extension", server.rcon("sm exts list")).group(1)

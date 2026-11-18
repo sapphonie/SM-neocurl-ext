@@ -1427,8 +1427,9 @@ The infos that are lists (`CURLINFO_SSL_ENGINES`, `CURLINFO_COOKIELIST`, `CURLIN
 - **Using a `CurlEasy` for a second request.** The options of a handle reach libcurl once. A second transfer on the
   same handle never sends the new request: it repeats the first one, or does nothing at all when the first one
   failed. Create a new `CurlEasy` per request.
-- **Starting a transfer on a handle whose transfer still runs.** Nothing prevents it, and two transfers then work
-  on the same handle. Wait for the complete callback.
+- **Starting a transfer on a handle whose transfer still runs.** `Perform`, `PerformThread`, `SendRecv` and
+  `LoadOpt` refuse it with an error ("A transfer of handle ... is still running"), which ends the plugin's function
+  like any error of a native. Wait for the complete callback.
 - **Calling `Perform` without `LoadOpt`.** The transfer fails with `CURLE_URL_MALFORMAT`. Call `LoadOpt` first, or
   use `PerformThread`, which needs no `LoadOpt`.
 - **Calling `Perform` while people play.** The server freezes for as long as the transfer takes. Use `PerformThread`.

@@ -15,6 +15,20 @@
 		return pContext->ThrowNativeError("Invalid Handle %x (error %d)", params[1], err);\
 	}
 
+static bool IsTransferRunning(cURLHandle *handle)
+{
+	std::lock_guard<std::mutex> lock(g_cURLManager.handle_state_mutex);
+	return handle->running;
+}
+
+/* A handle has one transfer at a time: a second one would work on the same
+ * libcurl handle from another thread. */
+#define REFUSE_RUNNING_TRANSFER()\
+	if(IsTransferRunning(handle))\
+	{\
+		return pContext->ThrowNativeError("A transfer of handle %x is still running", params[1]);\
+	}
+
 #define SETUP_CURL_WEBFORM()\
 	WebForm *handle;\
 	HandleError err;\
@@ -195,6 +209,7 @@ static cell_t sm_curl_easy_set_progress_interval(IPluginContext *pContext, const
 static cell_t sm_curl_easy_perform_thread(IPluginContext *pContext, const cell_t *params)
 {
 	SETUP_CURL_HANDLE();
+	REFUSE_RUNNING_TRANSFER();
 
 	IPluginFunction *pFunction = pContext->GetFunctionById(params[2]);
 	if(!pFunction)
@@ -213,6 +228,7 @@ static cell_t sm_curl_easy_perform_thread(IPluginContext *pContext, const cell_t
 static cell_t sm_curl_easy_perform(IPluginContext *pContext, const cell_t *params)
 {
 	SETUP_CURL_HANDLE();
+	REFUSE_RUNNING_TRANSFER();
 	
 	handle->running = true;
 	CURLcode code = curl_easy_perform(handle->curl);
@@ -298,6 +314,7 @@ static cell_t sm_curl_easy_getinfo_int(IPluginContext *pContext, const cell_t *p
 static cell_t sm_curl_load_opt(IPluginContext *pContext, const cell_t *params)
 {
 	SETUP_CURL_HANDLE();
+	REFUSE_RUNNING_TRANSFER();
 	
 	g_cURLManager.LoadcURLOption(handle);
 	return handle->lasterror;
@@ -355,6 +372,7 @@ static cell_t sm_curl_easy_strerror(IPluginContext *pContext, const cell_t *para
 static cell_t sm_curl_easy_send_recv(IPluginContext *pContext, const cell_t *params)
 {
 	SETUP_CURL_HANDLE();
+	REFUSE_RUNNING_TRANSFER();
 
 	IPluginFunction *pFunction_send = pContext->GetFunctionById(params[2]);
 	if(!pFunction_send)

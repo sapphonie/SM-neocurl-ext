@@ -38,6 +38,7 @@ public void OnPluginStart()
 	RegServerCmd("lt_sendrecv_value", Command_SendRecvValue, "lt_sendrecv_value <host:port> - the value of SendRecv's callbacks");
 	RegServerCmd("lt_progress_blocking", Command_ProgressBlocking, "lt_progress_blocking <url> <stop> - progress of a blocking transfer");
 	RegServerCmd("lt_delete_in_progress", Command_DeleteInProgress, "lt_delete_in_progress <url> - deletes in the progress callback");
+	RegServerCmd("lt_second_transfer", Command_SecondTransfer, "lt_second_transfer <url> - starts two transfers on one handle");
 	RegServerCmd("lt_read_overflow", Command_ReadOverflow, "lt_read_overflow <url> - a read callback that gives more than asked for");
 	RegServerCmd("lt_form_two_files", Command_FormTwoFiles, "lt_form_two_files <url> - posts a form section with two files");
 }
@@ -358,4 +359,21 @@ public void OnReadOverflowComplete(CurlEasy easy, CURLcode code)
 {
 	delete easy;
 	PrintToServer("[lifetime] read_overflow: code %d", code);
+}
+
+/* --- A second transfer on a handle whose transfer still runs --- */
+
+public Action Command_SecondTransfer(int args)
+{
+	char url[256];
+	GetCmdArg(1, url, sizeof(url));
+
+	g_Kept = new CurlEasy();
+	g_Kept.SetUrl(url);
+	g_Kept.PerformThread(OnUnexpectedComplete);
+	PrintToServer("[lifetime] second_transfer: first started");
+	// Refused with an error, which ends this function.
+	g_Kept.PerformThread(OnUnexpectedComplete);
+	PrintToServer("[lifetime] UNEXPECTED second transfer started");
+	return Plugin_Handled;
 }

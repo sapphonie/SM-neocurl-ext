@@ -363,12 +363,14 @@ native bool curl_easy_set_progress_interval(Handle hndl, float seconds);
  * 		Use this on curl_easy_perform or check all CURLoption are valid or not
  * 		Only can use one time for each curl handle
  * @ return 		The CURLcode code, see cURL_header.inc
+ * @ error			A transfer of the handle is still running.
  */
 native CURLcode curl_load_opt(Handle hndl);
 
 /**
  * Perform a file transfer
  * @ return 		The CURLcode code, see cURL_header.inc
+ * @ error			A transfer of the handle is still running.
  */
 native CURLcode curl_easy_perform(Handle hndl);
 
@@ -378,6 +380,7 @@ native CURLcode curl_easy_perform(Handle hndl);
  * @ param CURL_OnComplete	perform_callback	The complete callback.
  * @ param cell_t			value				Value to set.
  * @ noreturn
+ * @ error								A transfer of the handle is still running.
  */
 native void curl_easy_perform_thread(Handle hndl, CURL_OnComplete perform_callback, any value=0);
 
@@ -393,6 +396,7 @@ native void curl_easy_perform_thread(Handle hndl, CURL_OnComplete perform_callba
  * @ param cenn_t			recv_buffer_Size	Receive buffer size.
  * @ param cell_t			value				Value to set.
  * @ noreturn
+ * @ error								A transfer of the handle is still running.
  */
 native void curl_easy_send_recv(Handle hndl, CURL_OnSend send_callback, CURL_OnReceive receive_callback, CURL_OnComplete complete_callback, SendRecv_Act act, int send_timeout, int recv_timeout, int recv_buffer_Size = 1024, any value=0);
 
