@@ -50,13 +50,13 @@ static size_t Call_Write_Function(cURLHandle *handle, const char *buffer, size_t
 {
 	IPluginFunction *pFunc = handle->callback_Function[cURL_CallBack_WRITE_FUNCTION];
 	assert((pFunc != NULL));
-	cell_t result = bytes * nmemb;
+	cell_t result = static_cast<cell_t>(bytes * nmemb);
 	if(pFunc != NULL)
 	{
 		pFunc->PushCell(handle->hndl);
 		pFunc->PushStringEx((char *)buffer, nmemb+1, SM_PARAM_STRING_COPY|SM_PARAM_STRING_BINARY, 0);
-		pFunc->PushCell(bytes);
-		pFunc->PushCell(nmemb);
+		pFunc->PushCell(static_cast<cell_t>(bytes));
+		pFunc->PushCell(static_cast<cell_t>(nmemb));
 		pFunc->PushCell(handle->UserData[UserData_Type_Write_Func]);
 		pFunc->Execute(&result);
 	}
@@ -119,12 +119,12 @@ static size_t Call_Read_Function(cURLHandle *handle, size_t bytes, size_t nmemb)
 {
 	IPluginFunction *pFunc = handle->callback_Function[cURL_CallBack_READ_FUNCTION];
 	assert((pFunc != NULL));
-	cell_t result = bytes * nmemb;
+	cell_t result = static_cast<cell_t>(bytes * nmemb);
 	if(pFunc != NULL)
 	{
 		pFunc->PushCell(handle->hndl);
-		pFunc->PushCell(bytes);
-		pFunc->PushCell(nmemb);
+		pFunc->PushCell(static_cast<cell_t>(bytes));
+		pFunc->PushCell(static_cast<cell_t>(nmemb));
 		pFunc->PushCell(handle->UserData[UserData_Type_Read_Func]);
 		pFunc->Execute(&result);
 	}
@@ -353,7 +353,7 @@ void cURLManager::SDK_OnUnload()
 	curlhandle_list_mutex->Lock();
 	if(g_cURLThread_List.size() > 0)
 	{
-		printf("[%s] Waiting %d cURL Threads Terminate...\n",SMEXT_CONF_LOGTAG,g_cURLThread_List.size());		
+		printf("[%s] Waiting %u cURL Threads Terminate...\n",SMEXT_CONF_LOGTAG,static_cast<unsigned int>(g_cURLThread_List.size()));		
 
 		SourceHook::List<cURLThread *>::iterator iter = g_cURLThread_List.begin();
 		cURLThread *pInfo;
@@ -1077,7 +1077,9 @@ CURLFORMcode cURLManager::cURLFormAdd(IPluginContext *pContext, const cell_t *pa
 				}
 				form_opts[count] = form_code;
 				value = *addr;
-				form_data[count] = (char *)value;
+				// curl_formadd() takes these lengths as long, in the place of
+				// the pointers the other options have.
+				form_data[count] = reinterpret_cast<char *>(static_cast<intptr_t>(value));
 				count++;
 				i++;
 				break;

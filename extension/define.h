@@ -5,10 +5,6 @@
 #include <sh_list.h>
 #include <curl/curl.h>
 
-#ifdef PLATFORM_LINUX
-#define INVALID_SOCKET	-1
-#endif
-
 class cURLThread;
 struct cURLHandle;
 
@@ -83,7 +79,7 @@ enum UserData_Type
 struct cURLHandle {
 	cURLHandle():curl(NULL),running(false),finished(false),destroyed(false),lasterror(CURLE_OK),opt_loaded(false),
 		progress_interval_ms(1000),progress_last_ms(0),progress_pending(false),progress_abort(false),
-		thread(NULL),is_udp(false),sockextr(INVALID_SOCKET),send_timeout(60000),recv_timeout(60000)
+		thread(NULL),is_udp(false),sockextr(CURL_SOCKET_BAD),send_timeout(60000),recv_timeout(60000)
 	{
 	}
 	CURL *curl;
@@ -118,7 +114,9 @@ struct cURLHandle {
 	bool is_udp;
 
 	/* use for send & recv */
-	long sockextr;
+	// The socket of the last connection, in the platform's own type: a
+	// Windows socket does not fit into a long on 64-bit.
+	curl_socket_t sockextr;
 	long send_timeout;
 	long recv_timeout;
 

@@ -22,7 +22,8 @@ static int wait_on_socket(curl_socket_t sockfd, bool for_recv, long timeout_ms)
 		FD_SET(sockfd, &outfd);
 	} 
 	/* select() returns the number of signalled sockets or -1 */ 
-	res = select(sockfd + 1, &infd, &outfd, &errfd, &tv);
+	// Windows ignores the first argument; elsewhere a socket is an int.
+	res = select(static_cast<int>(sockfd + 1), &infd, &outfd, &errfd, &tv);
 	return res;
 }
 
@@ -161,7 +162,7 @@ void cURLThread::RunThread_Perform()
 	if((handle->lasterror = curl_easy_perform(handle->curl)) != CURLE_OK)
 		return;
 
-	handle->lasterror = curl_easy_getinfo(handle->curl, CURLINFO_LASTSOCKET, &handle->sockextr);
+	handle->lasterror = curl_easy_getinfo(handle->curl, CURLINFO_ACTIVESOCKET, &handle->sockextr);
 }
 
 static void curl_send_FramAction(void *data)
@@ -183,7 +184,7 @@ static void curl_send_FramAction(void *data)
 		cell_t result;
 		pFunc->PushCell(handle->hndl);
 		pFunc->PushCell(handle->lasterror);
-		pFunc->PushCell(thread->last_iolen);
+		pFunc->PushCell(static_cast<cell_t>(thread->last_iolen));
 		pFunc->PushCell(handle->UserData[UserData_Type_Send_Recv]);
 		pFunc->Execute(&result);
 		thread->SetSenRecvAction((SendRecv_Act)result);
@@ -212,7 +213,7 @@ static void curl_recv_FramAction(void *data)
 		pFunc->PushCell(handle->hndl);
 		pFunc->PushCell(handle->lasterror);
 		pFunc->PushStringEx(thread->GetReceiveBuffer(), thread->last_iolen, SM_PARAM_STRING_COPY|SM_PARAM_STRING_BINARY, 0);
-		pFunc->PushCell(thread->last_iolen);
+		pFunc->PushCell(static_cast<cell_t>(thread->last_iolen));
 		pFunc->PushCell(handle->UserData[UserData_Type_Send_Recv]);
 		pFunc->Execute(&result);
 		thread->SetSenRecvAction((SendRecv_Act)result);
@@ -222,9 +223,9 @@ static void curl_recv_FramAction(void *data)
 
 void cURLThread::RunThread_Send_Recv()
 {
-	assert((handle->sockextr != INVALID_SOCKET));
+	assert((handle->sockextr != CURL_SOCKET_BAD));
 
-	if(handle->sockextr == INVALID_SOCKET || event == NULL)
+	if(handle->sockextr == CURL_SOCKET_BAD || event == NULL)
 	{
 		handle->lasterror = CURLE_SEND_ERROR;
 		return;

@@ -236,7 +236,7 @@ static cell_t sm_curl_easy_perform(IPluginContext *pContext, const cell_t *param
 	if(stop && code == CURLE_OK)
 		code = CURLE_ABORTED_BY_CALLBACK;
 
-	curl_easy_getinfo(handle->curl, CURLINFO_LASTSOCKET, &handle->sockextr);
+	curl_easy_getinfo(handle->curl, CURLINFO_ACTIVESOCKET, &handle->sockextr);
 
 	return code;
 }
@@ -317,7 +317,7 @@ static cell_t sm_curl_easy_escape(IPluginContext *pContext, const cell_t *params
 	char *url;
 	pContext->LocalToString(params[2], &url);
 
-	char *buffer = curl_easy_escape(handle->curl, url, strlen(url));
+	char *buffer = curl_easy_escape(handle->curl, url, static_cast<int>(strlen(url)));
 	if(buffer == NULL)
 		return 0;
 
@@ -334,7 +334,7 @@ static cell_t sm_curl_easy_unescape(IPluginContext *pContext, const cell_t *para
 	pContext->LocalToString(params[2], &url);
 
 	int outlen;
-	char *buffer = curl_easy_unescape(handle->curl, url, strlen(url), &outlen);
+	char *buffer = curl_easy_unescape(handle->curl, url, static_cast<int>(strlen(url)), &outlen);
 	if(buffer == NULL)
 		return 0;
 
@@ -616,7 +616,7 @@ static cell_t sm_curl_hash_string(IPluginContext *pContext, const cell_t *params
 		data_size = params[2];		
 	} else {		
 		pContext->LocalToString(params[1], &input);
-		data_size = strlen(input);
+		data_size = static_cast<unsigned int>(strlen(input));
 	}
 
 	unsigned char output[128];
