@@ -38,6 +38,7 @@ public void OnPluginStart()
 	RegServerCmd("lt_sendrecv_value", Command_SendRecvValue, "lt_sendrecv_value <host:port> - the value of SendRecv's callbacks");
 	RegServerCmd("lt_progress_blocking", Command_ProgressBlocking, "lt_progress_blocking <url> <stop> - progress of a blocking transfer");
 	RegServerCmd("lt_delete_in_progress", Command_DeleteInProgress, "lt_delete_in_progress <url> - deletes in the progress callback");
+	RegServerCmd("lt_read_overflow", Command_ReadOverflow, "lt_read_overflow <url> - a read callback that gives more than asked for");
 	RegServerCmd("lt_form_two_files", Command_FormTwoFiles, "lt_form_two_files <url> - posts a form section with two files");
 }
 
@@ -322,4 +323,39 @@ public void OnFormTwoFilesComplete(CurlEasy easy, CURLcode code, CurlForm form)
 	delete easy;
 	delete form;
 	PrintToServer("[lifetime] form_two_files: code %d", code);
+}
+
+/* --- A read callback that hands over more than libcurl asked for --- */
+
+public Action Command_ReadOverflow(int args)
+{
+	char url[256];
+	GetCmdArg(1, url, sizeof(url));
+
+	CurlEasy easy = new CurlEasy();
+	easy.SetUrl(url);
+	easy.SetOptInt(CURLOPT_UPLOAD, 1);
+	easy.SetOptFunction(CURLOPT_READFUNCTION, OnReadTooMuch);
+	easy.PerformThread(OnReadOverflowComplete);
+	return Plugin_Handled;
+}
+
+// Larger than libcurl's upload buffer of 64 KB, and too large for the stack.
+char g_TooMuch[128 * 1024];
+
+public int OnReadTooMuch(CurlEasy easy, const int bytes, const int nmemb)
+{
+	int count = bytes * nmemb + 1;
+	if (count > sizeof(g_TooMuch)) {
+		PrintToServer("[lifetime] UNEXPECTED read of %d bytes", bytes * nmemb);
+		return 0;
+	}
+	easy.SetSendBuffer(g_TooMuch, count);
+	return count;
+}
+
+public void OnReadOverflowComplete(CurlEasy easy, CURLcode code)
+{
+	delete easy;
+	PrintToServer("[lifetime] read_overflow: code %d", code);
 }

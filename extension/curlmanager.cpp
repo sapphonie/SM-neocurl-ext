@@ -115,20 +115,42 @@ static size_t curl_write_function_SM(void *ptr, size_t bytes, size_t nmemb, void
 }
 
 /* Read Function */
+static const char *PluginFileOf(IPluginFunction *pFunc)
+{
+	IPlugin *plugin = plsys->FindPluginByContext(pFunc->GetParentContext()->GetContext());
+	return plugin ? plugin->GetFilename() : "unknown plugin";
+}
+
+/* Calls the plugin's read callback. Returns how many bytes of the send
+ * buffer are the next piece of the upload, 0 at its end, or
+ * CURL_READFUNC_ABORT: also for a count that libcurl did not ask for or
+ * that the send buffer does not hold. Main thread only. */
 static size_t Call_Read_Function(cURLHandle *handle, size_t bytes, size_t nmemb)
 {
 	IPluginFunction *pFunc = handle->callback_Function[cURL_CallBack_READ_FUNCTION];
 	assert((pFunc != NULL));
-	cell_t result = static_cast<cell_t>(bytes * nmemb);
-	if(pFunc != NULL)
+	if(pFunc == NULL)
+		return CURL_READFUNC_ABORT;
+
+	cell_t result = 0;
+	pFunc->PushCell(handle->hndl);
+	pFunc->PushCell(static_cast<cell_t>(bytes));
+	pFunc->PushCell(static_cast<cell_t>(nmemb));
+	pFunc->PushCell(handle->UserData[UserData_Type_Read_Func]);
+	pFunc->Execute(&result);
+
+	if(result == CURL_READFUNC_ABORT)
+		return CURL_READFUNC_ABORT;
+
+	size_t asked = bytes * nmemb;
+	size_t held = handle->send_buffer.size();
+	if(result < 0 || static_cast<size_t>(result) > asked || static_cast<size_t>(result) > held)
 	{
-		pFunc->PushCell(handle->hndl);
-		pFunc->PushCell(static_cast<cell_t>(bytes));
-		pFunc->PushCell(static_cast<cell_t>(nmemb));
-		pFunc->PushCell(handle->UserData[UserData_Type_Read_Func]);
-		pFunc->Execute(&result);
+		smutils->LogError(myself, "Read callback of %s returned %d bytes: libcurl asked for at most %u and the send buffer holds %u. The transfer is aborted.",
+			PluginFileOf(pFunc), result, static_cast<unsigned int>(asked), static_cast<unsigned int>(held));
+		return CURL_READFUNC_ABORT;
 	}
-	return result;
+	return static_cast<size_t>(result);
 }
 
 static void sm_read_function_FrameAction(void *data)
@@ -173,11 +195,9 @@ static size_t curl_read_function_SM(char *ptr, size_t bytes, size_t nmemb, void 
 	if(ret == CURL_READFUNC_ABORT)
 		return ret;
 
-	if(ret > 0)
-	{
-		memcpy(ptr,handle->send_buffer.data(), handle->send_buffer.size());
-	}
-
+	// Call_Read_Function() made sure that the buffer holds these bytes and
+	// that libcurl takes them.
+	memcpy(ptr, handle->send_buffer.data(), ret);
 	return ret;
 }
 

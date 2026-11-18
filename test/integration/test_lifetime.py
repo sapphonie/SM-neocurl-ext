@@ -131,6 +131,14 @@ def test_form_section_with_two_files(server, lifetime, http):
     assert b"content of the second file" in body
 
 
+def test_read_callback_that_gives_more_than_asked_for(server, lifetime, http):
+    lifetime('lt_read_overflow "%s/put/overflow"' % http.url)
+    # CURLE_ABORTED_BY_CALLBACK (42)
+    log = server.wait_for_log("[lifetime] read_overflow: code 42")
+
+    assert re.search(r"Read callback of curl_lifetime_test\.smx returned \d+ bytes", log)
+
+
 def unload_extension(server, lifetime):
     """Unloads the extension, which unloads every plugin that uses it."""
     number = re.search(r"\[(\d+)\] NEO cURL Extension", server.rcon("sm exts list")).group(1)

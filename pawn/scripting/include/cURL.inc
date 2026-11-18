@@ -229,7 +229,10 @@ typeset Openssl_Hash_Complete
  * @ param cell_t	nmemb		The number of items, so the most bytes libcurl takes now
  * @ param any		data		Data passed to curl_easy_setopt_function()
  * @ return 					The number of bytes given with curl_set_send_buffer(),
- * 								at most bytes * nmemb. 0 ends the upload.
+ * 								at most bytes * nmemb. 0 ends the upload. A number
+ * 								above bytes * nmemb or above the bytes given ends
+ * 								the transfer with CURLE_ABORTED_BY_CALLBACK and an
+ * 								error in the log.
  *
  * CURLOPT_XFERINFOFUNCTION: called with the progress of the transfer, at
  * most once per interval (curl_easy_set_progress_interval(), 1 second by

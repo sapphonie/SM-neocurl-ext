@@ -570,8 +570,10 @@ piece with `easy.SetSendBuffer(data, size)` and returns the number of bytes in i
 void CurlEasy.SetSendBuffer(const char[] data, int size = -1)
 ```
 
-`size` is the number of bytes of `data`; -1 takes `data` up to its NUL. Hand over exactly as many bytes as the
-callback returns, and never more than `bytes * nmemb`.
+`size` is the number of bytes of `data`; -1 takes `data` up to its NUL. Return at most `bytes * nmemb` and at most
+the number of bytes handed over; of a larger piece only the returned number of bytes is sent. A callback that returns
+more than `bytes * nmemb`, or more than it handed over, ends the transfer with `CURLE_ABORTED_BY_CALLBACK` and an
+error in SourceMod's error log.
 
 ```sourcepawn
 char g_Upload[1024];
