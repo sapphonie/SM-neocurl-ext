@@ -122,6 +122,15 @@ def test_plugin_unloaded_while_send_and_receive_waits(server, lifetime, sockets)
     reload_plugin(server)
 
 
+def test_form_section_with_two_files(server, lifetime, http):
+    lifetime('lt_form_two_files "%s/form"' % http.url)
+    server.wait_for_log("[lifetime] form_two_files: code 0")
+
+    body = http.requests_to("/form")[-1].body
+    assert b"content of the first file" in body
+    assert b"content of the second file" in body
+
+
 def unload_extension(server, lifetime):
     """Unloads the extension, which unloads every plugin that uses it."""
     number = re.search(r"\[(\d+)\] NEO cURL Extension", server.rcon("sm exts list")).group(1)

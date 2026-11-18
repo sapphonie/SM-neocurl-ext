@@ -990,6 +990,9 @@ CURLFORMcode cURLManager::cURLFormAdd(IPluginContext *pContext, const cell_t *pa
 
 	char *form_data[10];
 	memset(form_data, 0, sizeof(form_data));
+	// The paths of file options, which form_data points into until
+	// curl_formadd() has copied them.
+	std::string form_paths[10];
 
 	cell_t *addr;
 	int count = 0;
@@ -1020,8 +1023,9 @@ CURLFORMcode cURLManager::cURLFormAdd(IPluginContext *pContext, const cell_t *pa
 				{
 					char realpath[PLATFORM_MAX_PATH];
 					g_pSM->BuildPath(Path_Game, realpath, sizeof(realpath), "%s", form_data[count]);
-				
-					form_data[count] = realpath;
+
+					form_paths[count] = realpath;
+					form_data[count] = &form_paths[count][0];
 				}
 				form_opts[count] = form_code;
 				count++;

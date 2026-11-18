@@ -38,6 +38,7 @@ public void OnPluginStart()
 	RegServerCmd("lt_sendrecv_value", Command_SendRecvValue, "lt_sendrecv_value <host:port> - the value of SendRecv's callbacks");
 	RegServerCmd("lt_progress_blocking", Command_ProgressBlocking, "lt_progress_blocking <url> <stop> - progress of a blocking transfer");
 	RegServerCmd("lt_delete_in_progress", Command_DeleteInProgress, "lt_delete_in_progress <url> - deletes in the progress callback");
+	RegServerCmd("lt_form_two_files", Command_FormTwoFiles, "lt_form_two_files <url> - posts a form section with two files");
 }
 
 /* --- A handle that is closed, or whose plugin unloads, during its transfer --- */
@@ -284,4 +285,41 @@ public Action OnProgressDelete(CurlEasy easy, int downloaded, int downloadTotal,
 	delete g_Kept;
 	PrintToServer("[lifetime] delete_in_progress: deleted in the callback");
 	return Plugin_Continue;
+}
+
+/* --- A form section with two files, added with one curl_formadd --- */
+
+void WriteTextFile(const char[] path, const char[] text)
+{
+	File file = OpenFile(path, "wb");
+	file.WriteString(text, false);
+	delete file;
+}
+
+public Action Command_FormTwoFiles(int args)
+{
+	char url[256];
+	GetCmdArg(1, url, sizeof(url));
+
+	WriteTextFile(DATA_DIR ... "/lifetime_form_one.txt", "content of the first file");
+	WriteTextFile(DATA_DIR ... "/lifetime_form_two.txt", "content of the second file");
+
+	CurlForm form = new CurlForm();
+	curl_formadd(form, CURLFORM_COPYNAME, "files",
+	             CURLFORM_FILE, DATA_DIR ... "/lifetime_form_one.txt",
+	             CURLFORM_FILE, DATA_DIR ... "/lifetime_form_two.txt",
+	             CURLFORM_END);
+
+	CurlEasy easy = new CurlEasy();
+	easy.SetUrl(url);
+	easy.SetForm(form);
+	easy.PerformThread(OnFormTwoFilesComplete, form);
+	return Plugin_Handled;
+}
+
+public void OnFormTwoFilesComplete(CurlEasy easy, CURLcode code, CurlForm form)
+{
+	delete easy;
+	delete form;
+	PrintToServer("[lifetime] form_two_files: code %d", code);
 }
