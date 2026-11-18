@@ -148,7 +148,7 @@ native void crypt_hmac_file(Openssl_Hash algorithm, const char[] key, int keyLen
  * @param error         The error.
  * @param buffer        The string to write into.
  * @param maxlength     The size of buffer.
- * @return              The number of bytes written.
+ * @return              The number of bytes written; 0 for a maxlength of 0.
  * @error               Invalid error.
  */
 native int crypt_error_string(CryptError error, char[] buffer, int maxlength);

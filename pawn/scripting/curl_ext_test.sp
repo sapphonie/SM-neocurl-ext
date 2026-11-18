@@ -144,6 +144,7 @@ void TestCryptNow()
 	curl_hash_string("abc", 0, Openssl_Hash_BLAKE2S256, digest, sizeof(digest));
 	Check(StrEqual(digest, "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982"),
 	      "deprecated curl_hash_string with a new algorithm");
+	Check(Crypt.ErrorString(CryptError_OpenInput, digest, 0) == 0, "crypt error string without room");
 }
 
 void TestCryptLater()
@@ -214,6 +215,7 @@ void TestCompression()
 	char name[32];
 	Compression.ErrorString(CompressError_TooLarge, name, sizeof(name));
 	Check(StrEqual(name, "CompressError_TooLarge"), "compression error string");
+	Check(Compression.ErrorString(CompressError_TooLarge, name, 0) == 0, "compression error string without room");
 }
 
 public void OnCompressed(CompressError error, CurlBuffer output, CompressFormat format)
@@ -288,6 +290,7 @@ void TestWebSocket()
 	ws.SetOnPong(OnWsPong);
 	ws.SetOnClose(OnWsClose);
 	Check(ws.State == WebSocketState_Idle, "websocket idle before connect");
+	Check(ws.GetUrl(url, 0) == 0, "websocket url without room");
 	Started();
 	ws.Connect();
 	Check(ws.SendText("queued before open"), "websocket send before open");

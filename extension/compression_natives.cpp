@@ -191,7 +191,8 @@ cell_t Compression_ErrorString(IPluginContext *context, const cell_t *params)
 	cell_t error = params[1];
 	if (error < 0 || error > static_cast<cell_t>(neocurl::kLastPluginCodecError))
 		return context->ThrowNativeError("Invalid CompressError %d", error);
-	size_t written;
+	// Stays 0 for a maxlength of 0: nothing is written then, not even this.
+	size_t written = 0;
 	context->StringToLocalUTF8(params[2], params[3], neocurl::CodecErrorName(static_cast<CodecError>(error)),
 	                           &written);
 	return static_cast<cell_t>(written);

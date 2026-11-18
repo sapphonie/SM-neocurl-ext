@@ -173,7 +173,7 @@ native void compression_decompress_buffer(CompressFormat format, Handle buffer, 
  * @param error         The error.
  * @param buffer        The string to write into.
  * @param maxlength     The size of buffer.
- * @return              The number of bytes written.
+ * @return              The number of bytes written; 0 for a maxlength of 0.
  * @error               Invalid error.
  */
 native int compression_error_string(CompressError error, char[] buffer, int maxlength);

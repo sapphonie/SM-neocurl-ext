@@ -332,7 +332,7 @@ native void websocket_close(Handle ws, int code = 1000, const char[] reason = ""
 /** @return The state. */
 native WebSocketState websocket_get_state(Handle ws);
 
-/** Writes the URL. @return The number of bytes written. */
+/** Writes the URL. @return The number of bytes written; 0 for a maxlength of 0. */
 native int websocket_get_url(Handle ws, char[] buffer, int maxlength);
 
 /** @return The bytes of queued, unsent messages. */

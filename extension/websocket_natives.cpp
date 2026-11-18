@@ -570,7 +570,8 @@ cell_t WebSocket_GetUrl(IPluginContext *context, const cell_t *params)
 	WebSocket *socket = ReadWebSocket(context, params[1]);
 	if (!socket)
 		return 0;
-	size_t written;
+	// Stays 0 for a maxlength of 0: nothing is written then, not even this.
+	size_t written = 0;
 	context->StringToLocalUTF8(params[2], params[3], socket->config.url.c_str(), &written);
 	return static_cast<cell_t>(written);
 }
