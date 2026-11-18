@@ -17,8 +17,11 @@ public:
 	~cURLThread();
 	cURLHandle *GetHandle();
 	cURLThread_Type GetRunType();
+	// Has action(data) called in a game frame and waits until that called
+	// EventSignal(). Returns early when the extension unloads; the action is
+	// not called then. Transfer thread only.
+	void CallInFrame(void (*action)(void *), void *data);
 	void EventSignal();
-	void EventWait();
 	bool IsWaiting();
 	// Sets the next send & receive action and wakes the thread from the wait
 	// it is in. False when it is not waiting.
@@ -26,6 +29,8 @@ public:
 	// Ends the wait of SendRecv_Act_GOTO_WAIT now and for good: the send &
 	// receive loop ends at its next step.
 	void Abort();
+	// The extension unloads: ends every wait of the thread, now and for good.
+	void Stop();
 	char *GetReceiveBuffer();
 	void SetRecvBufferSize(unsigned int size);
 	void SetSenRecvAction(SendRecv_Act act);
@@ -43,17 +48,25 @@ private:
 	bool WaitForAction();
 
 private:
-	bool waiting;
-	// The wait of SendRecv_Act_GOTO_WAIT. It has its own lock so that an
-	// abort cannot be lost between the check and the wait.
+	// Waits until the socket can be read or written, at most timeout_ms.
+	// False when it cannot by then or the extension unloads.
+	bool WaitOnSocket(bool for_recv, long timeout_ms);
+
+private:
+	// Guards the flags of both waits, so that a signal cannot be lost
+	// between a wait's check and its sleep.
 	std::mutex action_mutex;
 	std::condition_variable action_cv;
+	// The wait of CallInFrame().
+	bool waiting;
+	bool frame_signaled;
+	// The wait of SendRecv_Act_GOTO_WAIT.
 	bool action_waiting;
 	bool action_signaled;
 	bool aborted;
+	bool stopped;
 	cURLHandle *handle;
 	cURLThread_Type type;
-	IEventSignal *event;
 	char *recv_buffer;
 	unsigned int recv_buffer_size;
 	unsigned int _current_recv_buffer_size;

@@ -1,4 +1,5 @@
 #include "opensslthread.h"
+#include "mainthread.h"
 
 // Yes. I know. I will make this not use fopen. Shut up.
 #ifdef _WIN32
@@ -18,6 +19,16 @@ type(_type),data(_data)
 OpensslThread::~OpensslThread()
 {
 
+}
+
+static void free_hash_pack(void *data)
+{
+	Openssl_Hash_pack *handle = (Openssl_Hash_pack *)data;
+	if(handle->output != NULL)
+		delete handle->output;
+	if(handle->path != NULL)
+		delete handle->path;
+	delete handle;
 }
 
 static void openssl_hash_FramAction(void *data)
@@ -40,11 +51,7 @@ static void openssl_hash_FramAction(void *data)
 		pFunc->Execute(NULL);
 	}
 	
-	if(handle->output != NULL)
-		delete handle->output;
-	if(handle->path != NULL)
-		delete handle->path;
-	delete handle;
+	free_hash_pack(handle);
 }
 
 void OpensslThread::RunFileHash()
@@ -98,9 +105,10 @@ void OpensslThread::OnTerminate(IThreadHandle *pHandle, bool cancel)
 {
 	if(type == OpensslThread_Type_HASH_FILE)
 	{
-		smutils->AddFrameAction(openssl_hash_FramAction, data);
+		mainthread::Post(openssl_hash_FramAction, data, free_hash_pack);
 	}
 
 	delete this;
+	mainthread::ThreadEnded(pHandle);
 }
 

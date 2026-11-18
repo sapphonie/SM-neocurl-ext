@@ -324,7 +324,7 @@ is not maintained.
 
 | Path | Content |
 |---|---|
-| `extension/` | The extension. `natives.cpp`, `curlmanager.cpp` and `curlthread.cpp` are libcurl's easy interface; `opensslmanager.cpp` and `opensslthread.cpp` the deprecated hash natives; `api.cpp` and the `*_natives.cpp` files are `CurlBuffer`, `WebSocket`, `Compression` and `Crypt`. |
+| `extension/` | The extension. `natives.cpp`, `curlmanager.cpp` and `curlthread.cpp` are libcurl's easy interface; `mainthread.cpp` takes their threads' calls to the game frame and joins the threads at unload; `opensslmanager.cpp` and `opensslthread.cpp` the deprecated hash natives; `api.cpp` and the `*_natives.cpp` files are `CurlBuffer`, `WebSocket`, `Compression` and `Crypt`. |
 | `extension/core/` | The parts of those four that know nothing about SourceMod: the compression formats, digests, encodings, path rules, the job queue and the WebSocket connection thread. |
 | `extension/tests/` | The unit tests of `extension/core/`. |
 | `extension/sdk/` | SourceMod's extension SDK files. `smsdk_config.h` has the extension's name and version. |

@@ -120,3 +120,40 @@ def test_plugin_unloaded_while_send_and_receive_waits(server, lifetime, sockets)
 
     wait_until(lambda: len(sockets.silent_clients) > before, "the connection to close", ABORT_SECONDS)
     reload_plugin(server)
+
+
+def unload_extension(server, lifetime):
+    """Unloads the extension, which unloads every plugin that uses it."""
+    number = re.search(r"\[(\d+)\] NEO cURL Extension", server.rcon("sm exts list")).group(1)
+    # SourceMod names the plugins it will unload and wants the command again with a code.
+    confirmation = re.search(r"sm exts unload \d+ \d+", lifetime("sm exts unload " + number)).group(0)
+    lifetime(confirmation)
+
+
+def reload_everything(server):
+    """Loads the plugins again; they bring the extension back."""
+    assert server.is_running(), "The server stopped"
+    server.rcon("sm plugins refresh")
+    server.wait_until_loaded(PLUGIN + ".smx")
+    assert "NEO cURL Extension" in server.rcon("sm exts list")
+
+
+def test_extension_unloaded_during_a_transfer(server, lifetime, http):
+    before = len(http.slow_requests)
+    lifetime('lt_slow_request "%s/slow"' % http.url)
+    server.wait_for_log("[lifetime] slow_request: started")
+    unload_extension(server, lifetime)
+
+    wait_until(lambda: len(http.slow_requests) > before, "the transfer to end", ABORT_SECONDS)
+    assert http.slow_requests[-1] is not None
+    reload_everything(server)
+
+
+def test_extension_unloaded_while_send_and_receive_waits(server, lifetime, sockets):
+    before = len(sockets.silent_clients)
+    lifetime('lt_idle_wait "%s"' % sockets.address)
+    server.wait_for_log("[lifetime] idle_wait: waiting")
+    unload_extension(server, lifetime)
+
+    wait_until(lambda: len(sockets.silent_clients) > before, "the connection to close", ABORT_SECONDS)
+    reload_everything(server)

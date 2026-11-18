@@ -22,6 +22,7 @@ for cxx in builder.targets:
     os.path.join('extension', 'extension.cpp'),
     os.path.join('extension', 'curlmanager.cpp'),
     os.path.join('extension', 'curlthread.cpp'),
+    os.path.join('extension', 'mainthread.cpp'),
     os.path.join('extension', 'natives.cpp'),
     os.path.join('extension', 'opensslmanager.cpp'),
     os.path.join('extension', 'opensslthread.cpp'),

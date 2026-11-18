@@ -9,6 +9,9 @@ class cURLManager
 {
 public:
 	void SDK_OnLoad();
+	// Tells every transfer to end. mainthread::WaitForThreads() waits for
+	// them.
+	void StopThreads();
 	void SDK_OnUnload();
 
 public:
@@ -48,10 +51,8 @@ public:
 	std::mutex handle_state_mutex;
 
 private:
-	bool waiting;
 	IMutex *curlhandle_list_mutex;
 	IMutex *closehelper_list_mutex;
-	IEventSignal *shutdown_event;
 	SourceHook::List<cURLThread *> g_cURLThread_List;
 	SourceHook::List<ICloseHelper *> g_CloseHelper_List;
 };

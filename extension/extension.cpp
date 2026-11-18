@@ -2,6 +2,7 @@
 #include "curlmanager.h"
 #include "opensslmanager.h"
 #include "api.h"
+#include "mainthread.h"
 #include <curl/curl.h>
 
 cURL_SM g_cURL_SM;
@@ -82,6 +83,8 @@ bool cURL_SM::SDK_OnLoad(char *error, size_t maxlength, bool late)
 	if(!api::Load(error, maxlength))
 		return false;
 
+	mainthread::Load();
+
 	g_cURLManager.SDK_OnLoad();
 
 	g_OpensslManager.SDK_OnLoad();
@@ -94,6 +97,21 @@ void cURL_SM::SDK_OnUnload()
 	shutdown = true;
 
 	api::Unload();
+
+	// The dependent plugins are unloaded after this, so no thread may be
+	// left that calls them or runs the extension's code.
+	g_cURLManager.StopThreads();
+	mainthread::WaitForThreads();
+	mainthread::Unload();
+
+	// Closes the handles the plugins still have. Without it the types stay
+	// behind and the extension cannot be loaded again.
+	HandleType_t *types[] = { &g_cURLHandle, &g_cURLFile, &g_WebForm, &g_cURLSlist };
+	for(HandleType_t *type : types)
+	{
+		handlesys->RemoveType(*type, myself_Identity);
+		*type = 0;
+	}
 
 	g_cURLManager.SDK_OnUnload();
 

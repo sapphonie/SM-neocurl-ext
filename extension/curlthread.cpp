@@ -1,4 +1,5 @@
 #include "curlthread.h"
+#include "mainthread.h"
 #include <string.h>
 
 static int wait_on_socket(curl_socket_t sockfd, bool for_recv, long timeout_ms)
@@ -29,32 +30,23 @@ static int wait_on_socket(curl_socket_t sockfd, bool for_recv, long timeout_ms)
 
 
 cURLThread::cURLThread(cURLHandle *_handle, cURLThread_Type _type):
-waiting(false),action_waiting(false),action_signaled(false),aborted(false),
-handle(_handle),type(_type),event(threader->MakeEventSignal()),
+waiting(false),frame_signaled(false),action_waiting(false),action_signaled(false),aborted(false),stopped(false),
+handle(_handle),type(_type),
 recv_buffer(NULL),recv_buffer_size(1024),_current_recv_buffer_size(0),last_iolen(0)
 
 {
 	assert((type > cURLThread_Type_NOTHING && type < cURLThread_Type_LAST));
-	assert((event != NULL));
 	handle->running = true;
 	handle->thread = this;	
 }
 
 cURLThread::~cURLThread()
 {
-	waiting = false;
-	if(event != NULL)
-	{
-		event->DestroyThis();
-		event = NULL;
-	}
 	if(recv_buffer != NULL)
 	{
 		delete [] recv_buffer;
 		recv_buffer = NULL;
 	}
-
-	g_cURLManager.RemovecURLThread(this);
 }
 
 cURLHandle *cURLThread::GetHandle()
@@ -69,15 +61,22 @@ cURLThread_Type cURLThread::GetRunType()
 
 void cURLThread::EventSignal()
 {
-	assert((event != NULL));
-	event->Signal();
+	std::lock_guard<std::mutex> lock(action_mutex);
+	frame_signaled = true;
+	action_cv.notify_all();
 }
 
-void cURLThread::EventWait()
+void cURLThread::CallInFrame(void (*action)(void *), void *data)
 {
-	assert((event != NULL));
+	{
+		std::lock_guard<std::mutex> lock(action_mutex);
+		frame_signaled = false;
+	}
+	mainthread::Post(action, data);
+
+	std::unique_lock<std::mutex> lock(action_mutex);
 	waiting = true;
-	event->Wait();
+	action_cv.wait(lock, [this] { return frame_signaled || stopped; });
 	waiting = false;
 }
 
@@ -100,11 +99,13 @@ bool cURLThread::SignalAction(SendRecv_Act act)
 		}
 	}
 
+	std::lock_guard<std::mutex> lock(action_mutex);
 	if(!waiting)
 		return false;
 
 	SetSenRecvAction(act);
-	EventSignal();
+	frame_signaled = true;
+	action_cv.notify_all();
 	return true;
 }
 
@@ -113,6 +114,32 @@ void cURLThread::Abort()
 	std::lock_guard<std::mutex> lock(action_mutex);
 	aborted = true;
 	action_cv.notify_all();
+}
+
+void cURLThread::Stop()
+{
+	std::lock_guard<std::mutex> lock(action_mutex);
+	aborted = true;
+	stopped = true;
+	action_cv.notify_all();
+}
+
+bool cURLThread::WaitOnSocket(bool for_recv, long timeout_ms)
+{
+	// In slices, since nothing wakes a select() when the extension unloads.
+	const long kSliceMs = 200;
+	long waited_ms = 0;
+	do
+	{
+		if(g_cURL_SM.IsShutdown())
+			return false;
+
+		long slice_ms = timeout_ms - waited_ms < kSliceMs ? timeout_ms - waited_ms : kSliceMs;
+		if(wait_on_socket(handle->sockextr, for_recv, slice_ms))
+			return true;
+		waited_ms += slice_ms;
+	} while(waited_ms < timeout_ms);
+	return false;
 }
 
 bool cURLThread::WaitForAction()
@@ -225,7 +252,7 @@ void cURLThread::RunThread_Send_Recv()
 {
 	assert((handle->sockextr != CURL_SOCKET_BAD));
 
-	if(handle->sockextr == CURL_SOCKET_BAD || event == NULL)
+	if(handle->sockextr == CURL_SOCKET_BAD)
 	{
 		handle->lasterror = CURLE_SEND_ERROR;
 		return;
@@ -249,7 +276,7 @@ select_action:
 
 /* Send Action */
 act_send:
-	if(!wait_on_socket(handle->sockextr, false, handle->send_timeout))
+	if(!WaitOnSocket(false, handle->send_timeout))
 	{
 		handle->lasterror = CURLE_OPERATION_TIMEDOUT;
 		goto sm_send_frame;
@@ -267,9 +294,7 @@ act_send_no_wait:
 
 	// put res to frame, let frame do action
 sm_send_frame:
-	smutils->AddFrameAction(curl_send_FramAction, this);
-
-	EventWait();
+	CallInFrame(curl_send_FramAction, this);
 
 	if(g_cURL_SM.IsShutdown())
 		goto act_end;
@@ -279,7 +304,7 @@ sm_send_frame:
 
 /* Recv Action */
 act_recv:
-	if(!wait_on_socket(handle->sockextr, true, handle->recv_timeout))
+	if(!WaitOnSocket(true, handle->recv_timeout))
 	{
 		handle->lasterror = CURLE_OPERATION_TIMEDOUT;
 		goto sm_recv_frame;
@@ -301,9 +326,7 @@ act_recv_no_wait:
 	handle->lasterror = curl_easy_recv(handle->curl, recv_buffer, _current_recv_buffer_size, &last_iolen);
 	
 sm_recv_frame:
-	smutils->AddFrameAction(curl_recv_FramAction, this);
-
-	EventWait();
+	CallInFrame(curl_recv_FramAction, this);
 
 	if(g_cURL_SM.IsShutdown())
 		goto act_end;
@@ -413,21 +436,25 @@ void cURLThread::OnTerminate(IThreadHandle *pHandle, bool cancel)
 
 	// The handle was closed during the transfer: its plugin gets no
 	// callback (it may be unloaded). Nothing else knows the handle anymore,
-	// so it is freed here, without waiting for a game frame that may never
-	// come for this thread when the extension unloads.
+	// so it is freed here, without waiting for a game frame that never
+	// comes for this thread when the extension unloads.
 	if(destroyed)
 	{
 		g_cURLManager.RemovecURLHandle(handle);
-		delete this;
-		return;
 	}
-
-	if(!g_cURL_SM.IsShutdown())
+	else
 	{
-		smutils->AddFrameAction(cUrl_Thread_Finish, this);
-		
-		EventWait();
+		CallInFrame(cUrl_Thread_Finish, this);
+		// The extension unloads: the plugin still has the handle, which is
+		// freed when the plugin is unloaded and must not know this thread
+		// then. The main thread waits for this thread meanwhile.
+		if(g_cURL_SM.IsShutdown() && handle != NULL && handle->thread == this)
+		{
+			handle->thread = NULL;
+		}
 	}
-	delete this;
-}
 
+	g_cURLManager.RemovecURLThread(this);
+	delete this;
+	mainthread::ThreadEnded(pHandle);
+}

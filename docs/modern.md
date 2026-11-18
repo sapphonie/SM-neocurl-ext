@@ -999,6 +999,9 @@ unloaded during a transfer: its transfers end and none of its callbacks is calle
 same instant: an HTTP transfer ends within about a second, a send & receive thread when its current send or receive
 has finished or timed out.
 
+Unloading the extension (`sm exts unload`) unloads the plugins that use it. Before that it ends every transfer and
+waits for it, which takes about a second and holds up the server for that long; no callback is called.
+
 ## Raw TCP and UDP connections
 
 A `CurlEasy` can also open a plain connection and let the plugin send and receive bytes itself. This is for services

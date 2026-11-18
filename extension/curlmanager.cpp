@@ -1,6 +1,7 @@
 #define CURL_NO_OLDIES
 
 #include "curlmanager.h"
+#include "mainthread.h"
 
 #include <chrono>
 #include <string.h>
@@ -100,8 +101,7 @@ static size_t curl_write_function_SM(void *ptr, size_t bytes, size_t nmemb, void
 		memcpy(data->buffer,ptr, nmemb);
 		data->buffer[nmemb] = '\0';
 
-		smutils->AddFrameAction(sm_write_function_FrameAction, data);
-		handle->thread->EventWait();
+		handle->thread->CallInFrame(sm_write_function_FrameAction, data);
 
 		ret = data->return_value;
 		delete [] data->buffer;
@@ -161,8 +161,7 @@ static size_t curl_read_function_SM(char *ptr, size_t bytes, size_t nmemb, void 
 
 		data_t *data = new data_t(handle, bytes, nmemb);
 
-		smutils->AddFrameAction(sm_read_function_FrameAction, data);
-		handle->thread->EventWait();
+		handle->thread->CallInFrame(sm_read_function_FrameAction, data);
 
 		ret = data->return_value;
 		delete data;
@@ -262,13 +261,19 @@ static void sm_progress_function_FrameAction(void *data)
 	handle->progress_pending = false;
 }
 
+static void discard_progress_report(void *data)
+{
+	delete (ProgressReport *)data;
+}
+
 /* libcurl calls this about once a second and whenever data moved. It ends
  * the transfer of a handle that was closed while it ran or whose plugin
- * asked to stop, and reports the progress to the plugin. */
+ * asked to stop, ends every transfer when the extension unloads, and
+ * reports the progress to the plugin. */
 static int curl_xferinfo_function(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
 {
 	cURLHandle *handle = (cURLHandle *)clientp;
-	if(handle->destroyed || handle->progress_abort)
+	if(handle->destroyed || handle->progress_abort || g_cURL_SM.IsShutdown())
 		return 1;
 	if(handle->callback_Function[cURL_CallBack_PROGRESS_FUNCTION] == NULL)
 		return 0;
@@ -290,9 +295,6 @@ static int curl_xferinfo_function(void *clientp, curl_off_t dltotal, curl_off_t 
 		return 1;
 	}
 
-	if(g_cURL_SM.IsShutdown())
-		return 0;
-
 	// One report at a time: the transfer does not wait for the game frame,
 	// and reports must not pile up when frames are slow.
 	if(handle->progress_pending.exchange(true))
@@ -302,7 +304,7 @@ static int curl_xferinfo_function(void *clientp, curl_off_t dltotal, curl_off_t 
 	ProgressReport *report = new ProgressReport();
 	report->hndl = handle->hndl;
 	memcpy(report->numbers, numbers, sizeof(numbers));
-	smutils->AddFrameAction(sm_progress_function_FrameAction, report);
+	mainthread::Post(sm_progress_function_FrameAction, report, discard_progress_report);
 	return 0;
 }
 
@@ -342,84 +344,41 @@ static curl_socket_t curl_opensocket_function(void *clientp, curlsocktype purpos
 void cURLManager::SDK_OnLoad()
 {
 	curlhandle_list_mutex = threader->MakeMutex();
-	shutdown_event = threader->MakeEventSignal();
 	closehelper_list_mutex = threader->MakeMutex();
+}
 
-	waiting = false;
+void cURLManager::StopThreads()
+{
+	curlhandle_list_mutex->Lock();
+	SourceHook::List<cURLThread *>::iterator iter;
+	for(iter=g_cURLThread_List.begin(); iter!=g_cURLThread_List.end(); iter++)
+	{
+		(*iter)->Stop();
+	}
+	curlhandle_list_mutex->Unlock();
 }
 
 void cURLManager::SDK_OnUnload()
 {
-	curlhandle_list_mutex->Lock();
-	if(g_cURLThread_List.size() > 0)
-	{
-		printf("[%s] Waiting %u cURL Threads Terminate...\n",SMEXT_CONF_LOGTAG,static_cast<unsigned int>(g_cURLThread_List.size()));		
-
-		SourceHook::List<cURLThread *>::iterator iter = g_cURLThread_List.begin();
-		cURLThread *pInfo;
-		while (iter != g_cURLThread_List.end())
-		{
-			pInfo = (*iter);
-			pInfo->Abort();
-			if(pInfo->waiting) {
-				pInfo->event->Signal();
-			}
-			iter++;
-		}
-
-		curlhandle_list_mutex->Unlock();
-
-		waiting = true;
-		shutdown_event->Wait();
-
-		printf("[%s] All cURL Thread Terminated !!!\n",SMEXT_CONF_LOGTAG);
-	} else {
-		curlhandle_list_mutex->Unlock();
-	}
-
-	shutdown_event->DestroyThis();
 	curlhandle_list_mutex->DestroyThis();
-
-	shutdown_event = NULL;
 	curlhandle_list_mutex = NULL;
-	g_cURLThread_List.clear();
 
 	g_CloseHelper_List.clear();
 }
 
 void cURLManager::CreatecURLThread(cURLThread *thread)
 {
-	if(g_cURL_SM.IsShutdown())
-	{
-		delete thread;
-		return;
-	}
 	curlhandle_list_mutex->Lock();
 	g_cURLThread_List.push_back(thread);
 	curlhandle_list_mutex->Unlock();
 
-	threader->MakeThread(thread);
+	mainthread::StartThread(thread);
 }
 
 void cURLManager::RemovecURLThread(cURLThread *thread)
 {
-	if(g_cURL_SM.IsShutdown())
-	{
-		RemovecURLHandle(thread->handle);
-	}
-
 	curlhandle_list_mutex->Lock();
 	g_cURLThread_List.remove(thread);
-
-	if(waiting)
-	{
-		if(g_cURLThread_List.size() == 0)
-		{
-			curlhandle_list_mutex->Unlock();
-			shutdown_event->Signal();
-			return;
-		}
-	}
 	curlhandle_list_mutex->Unlock();
 }
 

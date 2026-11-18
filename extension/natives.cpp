@@ -2,6 +2,7 @@
 #include "extension.h"
 #include "curlmanager.h"
 #include "opensslmanager.h"
+#include "mainthread.h"
 #include <sh_string.h>
 #include <curl/curl.h>
 
@@ -587,7 +588,7 @@ static cell_t sm_curl_hash_file(IPluginContext *pContext, const cell_t *params)
 	hash_pack->algorithm = (Openssl_Hash)params[2];
 
 	OpensslThread *thread =  new OpensslThread(hash_pack, OpensslThread_Type_HASH_FILE);
-	threader->MakeThread(thread);
+	mainthread::StartThread(thread);
 	
 	return 1;
 }

@@ -24,7 +24,7 @@ public:
 	bool IsShutdown();
 
 private:
-	bool shutdown;
+	std::atomic<bool> shutdown;
 
 };
 
